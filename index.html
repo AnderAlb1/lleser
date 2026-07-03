@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>LleSer · CMMS</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ==========================================================================
+     MÓDULO: PANTALLA DE CARGA
+     ========================================================================== -->
+<div id="pantalla-cargando">
+  <div class="spinner"></div>
+  <span>LleSer · Cargando</span>
+</div>
+
+<!-- ==========================================================================
+     MÓDULO: LOGIN
+     ========================================================================== -->
+<div id="pantalla-login">
+  <div class="login-grid">
+
+    <div class="panel-marca">
+      <div class="nodo n1" style="top:18%;left:70%;"></div>
+      <div class="nodo n2" style="top:60%;left:20%;"></div>
+      <div class="nodo n3" style="top:78%;left:60%;"></div>
+      <div class="marca-eyebrow">Sistema de gestión de mantenimiento</div>
+      <h1 class="marca-wordmark">Lle<span>Ser</span></h1>
+      <p class="marca-tagline">Control de equipos, órdenes de trabajo y reportes técnicos en un solo lugar, listo para campo y oficina.</p>
+    </div>
+
+    <div class="panel-form">
+      <form class="tarjeta-login placa" id="formLogin" autocomplete="off">
+        <span class="remache-tl"></span><span class="remache-tr"></span>
+        <span class="remache-bl"></span><span class="remache-br"></span>
+
+        <h2>Iniciar sesión</h2>
+        <p class="sub">Ingresa con tu cuenta de LleSer CMMS</p>
+
+        <div class="campo">
+          <label class="etiqueta" for="loginEmail">Usuario</label>
+          <input type="email" id="loginEmail" placeholder="correo@lleser.com" required>
+        </div>
+
+        <div class="campo">
+          <label class="etiqueta" for="loginPassword">Contraseña</label>
+          <input type="password" id="loginPassword" placeholder="••••••••" required>
+        </div>
+
+        <div class="fila-check">
+          <input type="checkbox" id="mantenerSesion">
+          <label for="mantenerSesion">Mantener sesión iniciada</label>
+        </div>
+
+        <button type="submit" class="btn-primario">Ingresar</button>
+
+        <div class="error-login" id="errorLogin"></div>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<!-- ==========================================================================
+     APLICACIÓN PRINCIPAL
+     ========================================================================== -->
+<div id="app-principal">
+
+  <header class="topbar">
+    <div class="topbar-izq">
+      <button class="btn-hamburguesa" onclick="toggleSidebar()"><span></span><span></span><span></span></button>
+      <div class="topbar-wordmark">Lle<span>Ser</span></div>
+    </div>
+    <div class="usuario-chip">
+      <span id="chipCorreo"></span>
+      <span class="rol" id="chipRol">—</span>
+      <button class="btn-salir" onclick="cerrarSesion()">Salir</button>
+    </div>
+  </header>
+
+  <div id="overlay" onclick="toggleSidebar()"></div>
+
+  <nav id="sidebar">
+    <div class="sidebar-head"><div class="wordmark">Lle<span>Ser</span> · CMMS</div></div>
+    <div id="menuItems"></div>
+  </nav>
+
+  <main>
+    <!-- ---------- VISTA: INICIO (grid de módulos) ---------- -->
+    <section id="vista-inicio">
+      <div class="vista-header">
+        <div class="eyebrow">Panel principal</div>
+        <h1>Módulos del sistema</h1>
+        <p>Los módulos marcados como "próximamente" se irán activando en las siguientes entregas.</p>
+      </div>
+      <div class="grid-modulos" id="gridModulos"></div>
+    </section>
+
+    <!-- ---------- VISTA: CONFIGURACIÓN ---------- -->
+    <section id="vista-configuracion" class="oculto">
+      <div class="vista-header">
+        <div class="eyebrow">Configuración</div>
+        <h1>Ajustes del sistema</h1>
+      </div>
+
+      <div class="tabs-config" id="tabsConfig"></div>
+
+      <!-- Sub-vista: cambiar contraseña (funcional) -->
+      <div id="config-password">
+        <div class="panel-config placa">
+          <span class="remache-tl"></span><span class="remache-tr"></span>
+          <span class="remache-bl"></span><span class="remache-br"></span>
+          <span class="etiqueta">Seguridad de la cuenta</span>
+          <form id="formCambiarPassword">
+            <div class="campo">
+              <label class="etiqueta" for="pwActual">Contraseña actual</label>
+              <input type="password" id="pwActual" required>
+            </div>
+            <div class="campo">
+              <label class="etiqueta" for="pwNueva">Nueva contraseña</label>
+              <input type="password" id="pwNueva" minlength="6" required>
+            </div>
+            <div class="campo">
+              <label class="etiqueta" for="pwConfirmar">Confirmar nueva contraseña</label>
+              <input type="password" id="pwConfirmar" minlength="6" required>
+            </div>
+            <button type="submit" class="btn-primario">Actualizar contraseña</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Sub-vistas pendientes -->
+      <div id="config-logo" class="oculto"><div class="aviso-proximo">El panel para subir el logo de la empresa se activará en la próxima entrega.</div></div>
+      <div id="config-tecnicos" class="oculto"><div class="aviso-proximo">La gestión de perfiles de técnicos (nombre, cargo, firma) se activará en la próxima entrega.</div></div>
+    </section>
+
+    <!-- ---------- VISTAS futuras (placeholders) ---------- -->
+    <section id="vista-equipos" class="oculto"><div class="aviso-proximo">Módulo de Gestión de Equipos — próximamente.</div></section>
+    <section id="vista-ordenes" class="oculto"><div class="aviso-proximo">Módulo de Órdenes de Trabajo — próximamente.</div></section>
+    <section id="vista-reportes" class="oculto"><div class="aviso-proximo">Módulo de Generar Reporte — próximamente.</div></section>
+  </main>
+</div>
+
+<div id="toast-container"></div>
+
+<!-- ==========================================================================
+     LIBRERÍAS EXTERNAS
+     ========================================================================== -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-auth-compat.min.js"></script>
+
+<!-- ==========================================================================
+     CÓDIGO PROPIO, POR MÓDULO
+     El orden importa: firebase-config primero, utilidades antes de lo que
+     las usa, y auth.js antes de navegacion.js / configuracion.js porque
+     estos leen "rolActual" y "usuarioActual".
+     ========================================================================== -->
+<script src="js/firebase-config.js"></script>
+<script src="js/utilidades.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/navegacion.js"></script>
+<script src="js/configuracion.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,354 @@
+/* ==========================================================================
+   LLESER · CMMS — SISTEMA DE DISEÑO
+   Concepto: "placa de equipo" — cada superficie clave (login, tarjetas de
+   módulo) se trata como una placa de identificación industrial: remaches
+   en las esquinas, etiquetas en mayúsculas monoespaciadas, fondo tipo
+   plano técnico (blueprint) en las zonas de marca.
+   ========================================================================== */
+
+:root{
+  /* Paleta */
+  --petrol-900:#0E2027;
+  --petrol-800:#153039;
+  --petrol-700:#1C3E49;
+  --steel-400:#7C93A0;
+  --steel-200:#C4D2D8;
+  --mist-050:#F4F7F8;
+  --ink-900:#152026;
+  --ink-600:#4C5D66;
+  --amber-500:#E8A33D;
+  --amber-600:#C9822A;
+  --teal-500:#3F9C90;
+  --danger-500:#D2493C;
+  --success-500:#3F9C6E;
+  --border:#DDE5E8;
+
+  /* Tipografía */
+  --font-ui: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --radius-card: 14px;
+  --shadow-card: 0 8px 30px -12px rgba(14,32,39,0.35);
+}
+
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;height:100%;}
+body{
+  font-family:var(--font-ui);
+  background:var(--mist-050);
+  color:var(--ink-900);
+  -webkit-font-smoothing:antialiased;
+}
+.oculto{display:none !important;}
+button{font-family:inherit;cursor:pointer;}
+input{font-family:inherit;}
+
+/* ---------- Placa: remaches decorativos ---------- */
+.placa{position:relative;}
+.placa .remache-tl,.placa .remache-tr,.placa .remache-bl,.placa .remache-br{
+  content:"";position:absolute;width:6px;height:6px;border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #fff8, var(--steel-400) 70%);
+  box-shadow:0 1px 2px rgba(0,0,0,.25) inset;
+}
+.placa .remache-tl{top:10px;left:10px;}
+.placa .remache-tr{top:10px;right:10px;}
+.placa .remache-bl{bottom:10px;left:10px;}
+.placa .remache-br{bottom:10px;right:10px;}
+
+/* ---------- Etiqueta tipo placa ---------- */
+.etiqueta{
+  font-family:var(--font-mono);
+  font-size:11px;
+  font-weight:600;
+  letter-spacing:.12em;
+  text-transform:uppercase;
+  color:var(--steel-400);
+}
+
+/* ==========================================================================
+   MÓDULO: PANTALLA DE CARGA
+   ========================================================================== */
+#pantalla-cargando{
+  position:fixed;inset:0;z-index:9999;
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;
+  background:var(--petrol-900);
+  transition:opacity .4s ease;
+}
+.spinner{
+  width:34px;height:34px;border-radius:50%;
+  border:3px solid rgba(232,163,61,.25);
+  border-top-color:var(--amber-500);
+  animation:girar 0.9s linear infinite;
+}
+@keyframes girar{to{transform:rotate(360deg);}}
+#pantalla-cargando span{font-family:var(--font-mono);color:var(--steel-200);font-size:12px;letter-spacing:.15em;text-transform:uppercase;}
+
+/* ==========================================================================
+   MÓDULO: LOGIN
+   ========================================================================== */
+#pantalla-login{
+  position:fixed;inset:0;display:none;
+  background:var(--petrol-900);
+}
+#pantalla-login.mostrar{display:flex;}
+
+.login-grid{
+  display:grid;
+  grid-template-columns: 1.1fr 1fr;
+  width:100%;height:100%;
+}
+
+/* --- Panel de marca (izquierda) con patrón de plano técnico --- */
+.panel-marca{
+  position:relative;
+  overflow:hidden;
+  display:flex;flex-direction:column;justify-content:center;
+  padding:56px;
+  background:
+    linear-gradient(var(--petrol-900),var(--petrol-900)),
+    repeating-linear-gradient(0deg, rgba(124,147,160,0.08) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(90deg, rgba(124,147,160,0.08) 0 1px, transparent 1px 44px);
+}
+.nodo{
+  position:absolute;width:8px;height:8px;border-radius:50%;
+  background:var(--amber-500);
+  box-shadow:0 0 0 4px rgba(232,163,61,.15);
+  animation:pulso 2.6s ease-in-out infinite;
+}
+.nodo.n2{animation-delay:.6s;}
+.nodo.n3{animation-delay:1.2s;}
+@keyframes pulso{
+  0%,100%{box-shadow:0 0 0 4px rgba(232,163,61,.15);}
+  50%{box-shadow:0 0 0 9px rgba(232,163,61,.05);}
+}
+.marca-wordmark{
+  font-family:var(--font-mono);
+  font-weight:600;
+  font-size:44px;
+  letter-spacing:.02em;
+  color:var(--mist-050);
+  margin:0;
+}
+.marca-wordmark span{color:var(--amber-500);}
+.marca-tagline{
+  margin-top:10px;
+  color:var(--steel-200);
+  font-size:14px;
+  max-width:360px;
+  line-height:1.5;
+}
+.marca-eyebrow{
+  font-family:var(--font-mono);
+  font-size:11px;
+  letter-spacing:.2em;
+  text-transform:uppercase;
+  color:var(--steel-400);
+  margin-bottom:18px;
+}
+
+/* --- Panel del formulario (derecha) --- */
+.panel-form{
+  display:flex;align-items:center;justify-content:center;
+  background:var(--mist-050);
+  padding:32px;
+}
+.tarjeta-login{
+  width:100%;max-width:380px;
+  background:#fff;
+  border-radius:var(--radius-card);
+  box-shadow:var(--shadow-card);
+  border:1px solid var(--border);
+  padding:34px 30px 28px;
+}
+.tarjeta-login h2{
+  font-size:20px;margin:0 0 4px;color:var(--ink-900);
+}
+.tarjeta-login .sub{
+  font-size:13px;color:var(--ink-600);margin:0 0 26px;
+}
+.campo{margin-bottom:18px;}
+.campo label{
+  display:block;margin-bottom:6px;
+}
+.campo input{
+  width:100%;padding:11px 12px;
+  border:1.5px solid var(--border);
+  border-radius:8px;
+  font-size:14px;
+  background:var(--mist-050);
+  transition:border-color .15s, background .15s;
+}
+.campo input:focus{
+  outline:none;border-color:var(--amber-500);background:#fff;
+}
+.fila-check{
+  display:flex;align-items:center;gap:8px;margin-bottom:22px;
+}
+.fila-check input{width:15px;height:15px;accent-color:var(--amber-500);}
+.fila-check label{font-size:13px;color:var(--ink-600);}
+
+.btn-primario{
+  width:100%;padding:12px;border:none;border-radius:8px;
+  background:var(--amber-500);color:var(--petrol-900);
+  font-weight:600;font-size:14px;letter-spacing:.01em;
+  transition:background .15s, transform .1s;
+}
+.btn-primario:hover{background:var(--amber-600);}
+.btn-primario:active{transform:scale(.99);}
+
+.error-login{
+  display:none;margin-top:14px;padding:10px 12px;border-radius:8px;
+  background:#FBEAE7;color:var(--danger-500);font-size:13px;
+}
+.error-login.mostrar{display:block;}
+
+@media (max-width: 860px){
+  .login-grid{grid-template-columns:1fr;}
+  .panel-marca{padding:40px 28px 24px;min-height:220px;}
+  .marca-wordmark{font-size:32px;}
+}
+
+/* ==========================================================================
+   APP PRINCIPAL — ESTRUCTURA
+   ========================================================================== */
+#app-principal{display:none;min-height:100vh;background:var(--mist-050);}
+
+.topbar{
+  position:sticky;top:0;z-index:50;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 18px;
+  background:var(--petrol-900);
+  color:var(--mist-050);
+}
+.topbar-izq{display:flex;align-items:center;gap:14px;}
+.btn-hamburguesa{
+  width:36px;height:36px;border:none;background:transparent;
+  display:flex;flex-direction:column;justify-content:center;gap:4px;align-items:center;
+}
+.btn-hamburguesa span{width:20px;height:2px;background:var(--mist-050);border-radius:2px;}
+.topbar-wordmark{font-family:var(--font-mono);font-weight:600;font-size:16px;letter-spacing:.03em;}
+.topbar-wordmark span{color:var(--amber-500);}
+
+.usuario-chip{
+  display:flex;align-items:center;gap:10px;
+  font-size:12px;color:var(--steel-200);
+}
+.usuario-chip .rol{
+  font-family:var(--font-mono);
+  text-transform:uppercase;letter-spacing:.08em;font-size:10px;
+  padding:3px 8px;border-radius:20px;
+  background:rgba(232,163,61,.15);color:var(--amber-500);
+}
+.btn-salir{
+  border:1px solid var(--steel-400);background:transparent;color:var(--steel-200);
+  padding:6px 12px;border-radius:7px;font-size:12px;
+}
+.btn-salir:hover{border-color:var(--amber-500);color:var(--amber-500);}
+
+/* ---------- Sidebar ---------- */
+#overlay{
+  position:fixed;inset:0;background:rgba(14,32,39,.45);z-index:60;
+  display:none;
+}
+#overlay.activo{display:block;}
+
+#sidebar{
+  position:fixed;top:0;left:0;bottom:0;width:270px;z-index:70;
+  background:var(--petrol-800);
+  transform:translateX(-100%);
+  transition:transform .25s ease;
+  display:flex;flex-direction:column;
+  padding:20px 0;
+}
+#sidebar.activo{transform:translateX(0);}
+.sidebar-head{
+  padding:0 20px 18px;margin-bottom:8px;
+  border-bottom:1px solid rgba(255,255,255,.08);
+}
+.sidebar-head .wordmark{font-family:var(--font-mono);color:var(--mist-050);font-weight:600;font-size:15px;}
+.sidebar-head .wordmark span{color:var(--amber-500);}
+.item-menu{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 20px;color:var(--steel-200);font-size:14px;
+  border-left:3px solid transparent;
+  transition:background .15s;
+}
+.item-menu:hover{background:rgba(255,255,255,.04);}
+.item-menu.activo{
+  border-left-color:var(--amber-500);
+  background:rgba(232,163,61,.08);
+  color:#fff;
+}
+.item-menu .icono{width:18px;text-align:center;font-family:var(--font-mono);}
+.item-menu .badge-proximo{
+  margin-left:auto;font-family:var(--font-mono);font-size:9px;
+  letter-spacing:.08em;color:var(--steel-400);
+  border:1px solid var(--steel-400);border-radius:20px;padding:2px 6px;
+}
+
+/* ---------- Contenido principal ---------- */
+main{padding:26px 20px 60px;max-width:1080px;margin:0 auto;}
+.vista-header{margin-bottom:22px;}
+.vista-header .eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--steel-400);}
+.vista-header h1{margin:4px 0 0;font-size:22px;color:var(--ink-900);}
+.vista-header p{margin:6px 0 0;font-size:13.5px;color:var(--ink-600);}
+
+/* Grid de módulos (placas) */
+.grid-modulos{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;
+}
+.tarjeta-modulo{
+  background:#fff;border:1px solid var(--border);border-radius:var(--radius-card);
+  padding:20px 18px;min-height:130px;
+  display:flex;flex-direction:column;gap:8px;
+  box-shadow:var(--shadow-card);
+  transition:transform .12s;
+}
+.tarjeta-modulo.clicable{cursor:pointer;}
+.tarjeta-modulo.clicable:hover{transform:translateY(-2px);}
+.tarjeta-modulo .codigo{font-family:var(--font-mono);font-size:11px;color:var(--amber-600);letter-spacing:.08em;}
+.tarjeta-modulo h3{margin:0;font-size:15.5px;}
+.tarjeta-modulo p{margin:0;font-size:12.5px;color:var(--ink-600);line-height:1.4;}
+.tarjeta-modulo .estado{
+  margin-top:auto;align-self:flex-start;
+  font-family:var(--font-mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  padding:3px 8px;border-radius:20px;
+}
+.estado.listo{background:rgba(63,156,110,.12);color:var(--success-500);}
+.estado.proximo{background:rgba(124,147,160,.15);color:var(--ink-600);}
+
+/* ---------- Tabs de configuración ---------- */
+.tabs-config{display:flex;gap:6px;margin-bottom:22px;flex-wrap:wrap;border-bottom:1px solid var(--border);}
+.tab-config{
+  padding:10px 14px;font-size:13px;color:var(--ink-600);
+  border-bottom:2px solid transparent;
+}
+.tab-config.activa{color:var(--ink-900);border-color:var(--amber-500);font-weight:600;}
+.tab-config[disabled]{opacity:.4;cursor:not-allowed;}
+
+.panel-config{
+  background:#fff;border:1px solid var(--border);border-radius:var(--radius-card);
+  padding:26px;max-width:440px;box-shadow:var(--shadow-card);
+}
+.panel-config .etiqueta{display:block;margin-bottom:16px;}
+.panel-config .campo input{margin-top:2px;}
+
+.aviso-proximo{
+  font-size:13px;color:var(--ink-600);
+  background:#fff;border:1px dashed var(--border);border-radius:var(--radius-card);
+  padding:30px;text-align:center;
+}
+
+/* ---------- Toast ---------- */
+#toast-container{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:8px;align-items:center;}
+.toast{
+  font-size:13px;padding:11px 18px;border-radius:9px;color:#fff;
+  background:var(--ink-900);box-shadow:0 6px 20px rgba(0,0,0,.25);
+  opacity:0;transform:translateY(10px);transition:opacity .2s, transform .2s;
+  max-width:90vw;
+}
+.toast.show{opacity:1;transform:translateY(0);}
+.toast.success{background:var(--success-500);}
+.toast.error{background:var(--danger-500);}
+.toast.warning{background:var(--amber-600);}
+.toast.info{background:var(--petrol-700);}

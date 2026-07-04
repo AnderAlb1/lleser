@@ -32,6 +32,47 @@ function mostrarTabConfig(id, btnEl) {
   ["password", "logo", "tecnicos"].forEach((sec) => {
     document.getElementById("config-" + sec).classList.toggle("oculto", sec !== id);
   });
+
+  // Carga perezosa: solo pedimos los datos cuando el usuario entra a esa pestaña
+  if (id === "logo") cargarLogo();
+  if (id === "tecnicos") cargarTecnicos();
+}
+
+// ---------- Logo de la empresa ----------
+document.getElementById("formLogo").addEventListener("submit", function (e) {
+  e.preventDefault();
+  const archivo = document.getElementById("logoEmpresa").files[0];
+  if (!archivo) {
+    mostrarToast("Selecciona una imagen primero", "warning");
+    return;
+  }
+
+  const lector = new FileReader();
+  lector.onload = function (evento) {
+    const logoBase64 = evento.target.result;
+    db.collection("configuracion").doc("general")
+      .set({ logoBase64, actualizado: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+      .then(() => {
+        mostrarToast("Logo guardado correctamente", "success");
+        pintarPreviewLogo(logoBase64);
+      })
+      .catch((error) => mostrarToast("Error al guardar el logo: " + error.message, "error"));
+  };
+  lector.readAsDataURL(archivo);
+});
+
+function cargarLogo() {
+  db.collection("configuracion").doc("general").get()
+    .then((doc) => {
+      if (doc.exists && doc.data().logoBase64) {
+        pintarPreviewLogo(doc.data().logoBase64);
+      }
+    })
+    .catch((error) => console.error("Error al cargar el logo:", error));
+}
+
+function pintarPreviewLogo(base64) {
+  document.getElementById("previewLogo").innerHTML = `<img src="${base64}" alt="Logo de la empresa">`;
 }
 
 // ---------- Cambiar contraseña ----------

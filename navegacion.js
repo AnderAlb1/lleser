@@ -7,7 +7,7 @@
 // Catálogo de módulos del sistema. Cuando un módulo quede listo,
 // solo hay que cambiar "listo:true" y ya se activa en el menú y el grid.
 const MODULOS = [
-  { id: "equipos",       icono: "01", nombre: "Gestión de Equipos", codigo: "MOD-EQP", desc: "Alta, edición e historial de equipos.",              roles: ["admin"],           listo: false, vista: "vista-equipos" },
+  { id: "equipos",       icono: "01", nombre: "Gestión de Equipos", codigo: "MOD-EQP", desc: "Alta, edición e historial de equipos.",              roles: ["admin"],           listo: true,  vista: "vista-equipos" },
   { id: "ordenes",       icono: "02", nombre: "Orden de Trabajo",   codigo: "MOD-OT",  desc: "Programación de mantenimientos y actividades.",       roles: ["admin"],           listo: false, vista: "vista-ordenes" },
   { id: "reportes",      icono: "03", nombre: "Generar Reporte",    codigo: "MOD-REP", desc: "Formulario de servicio técnico y generación de PDF.", roles: ["tecnico"],         listo: false, vista: "vista-reportes" },
   { id: "configuracion", icono: "04", nombre: "Configuración",      codigo: "MOD-CFG", desc: "Logo, técnicos, usuarios y seguridad de la cuenta.",  roles: ["admin", "tecnico"], listo: true,  vista: "vista-configuracion" }
@@ -40,6 +40,9 @@ function renderMenu() {
 function mostrarVista(idVista) {
   document.querySelectorAll("main > section").forEach((s) => s.classList.add("oculto"));
   document.getElementById(idVista).classList.remove("oculto");
+
+  // Cada módulo con estado propio se inicializa/recarga al entrar a su vista
+  if (idVista === "vista-equipos") inicializarModuloEquipos();
 }
 
 function renderGridModulos() {

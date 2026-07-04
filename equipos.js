@@ -45,59 +45,31 @@ function mostrarTabEquipos(id, btnEl) {
   if (id === "historial") cargarSelectHistorial();
 }
 
-// ---------- Código consecutivo automático (EQP-0001, EQP-0002, ...) ----------
-function generarCodigoEquipo() {
-  const contadorRef = db.collection("configuracion").doc("contadores");
-  return db.runTransaction((tx) => {
-    return tx.get(contadorRef).then((doc) => {
-      const actual = doc.exists && doc.data().equipos ? doc.data().equipos : 0;
-      const siguiente = actual + 1;
-      tx.set(contadorRef, { equipos: siguiente }, { merge: true });
-      return "EQP-" + String(siguiente).padStart(4, "0");
-    });
-  });
-}
-
 // ---------- Guardar (crear o actualizar) ----------
 document.getElementById("formEquipo").addEventListener("submit", function (e) {
   e.preventDefault();
 
   const id = document.getElementById("equipoId").value;
   const datos = {
+    codigo: document.getElementById("equipoCodigo").value.trim().toUpperCase(),
     nombre: document.getElementById("equipoNombre").value.trim().toUpperCase(),
-    descripcion: document.getElementById("equipoDescripcion").value.trim().toUpperCase(),
     marca: document.getElementById("equipoMarca").value.trim().toUpperCase(),
     modelo: document.getElementById("equipoModelo").value.trim().toUpperCase(),
     serie: document.getElementById("equipoSerie").value.trim().toUpperCase(),
-    ubicacion: document.getElementById("equipoUbicacion").value.trim().toUpperCase(),
-    estado: document.getElementById("equipoEstado").value
+    ubicacion: document.getElementById("equipoUbicacion").value.trim().toUpperCase()
   };
 
-  if (id) {
-    // Edición: el código no cambia
-    db.collection("equipos").doc(id).update(datos)
-      .then(() => {
-        mostrarToast("Equipo actualizado", "success");
-        cancelarEdicionEquipo();
-        cargarEquipos();
-      })
-      .catch((error) => mostrarToast("Error al actualizar: " + error.message, "error"));
-  } else {
-    // Alta: generamos el código consecutivo primero
-    generarCodigoEquipo().then((codigo) => {
-      return db.collection("equipos").add({
-        ...datos,
-        codigo,
-        fechaCreacion: firebase.firestore.FieldValue.serverTimestamp()
-      });
+  const operacion = id
+    ? db.collection("equipos").doc(id).update(datos)
+    : db.collection("equipos").add({ ...datos, fechaCreacion: firebase.firestore.FieldValue.serverTimestamp() });
+
+  operacion
+    .then(() => {
+      mostrarToast(id ? "Equipo actualizado" : "Equipo agregado", "success");
+      cancelarEdicionEquipo();
+      cargarEquipos();
     })
-      .then(() => {
-        mostrarToast("Equipo agregado", "success");
-        cancelarEdicionEquipo();
-        cargarEquipos();
-      })
-      .catch((error) => mostrarToast("Error al agregar: " + error.message, "error"));
-  }
+    .catch((error) => mostrarToast("Error al guardar: " + error.message, "error"));
 });
 
 // ---------- Listar ----------
@@ -121,14 +93,7 @@ function pintarEquipos(lista) {
     return;
   }
 
-  const etiquetasEstado = {
-    OPERATIVO: { texto: "Operativo", clase: "operativo" },
-    EN_MANTENIMIENTO: { texto: "En mantenimiento", clase: "mantenimiento" },
-    FUERA_DE_SERVICIO: { texto: "Fuera de servicio", clase: "fuera" }
-  };
-
   lista.forEach((eq) => {
-    const est = etiquetasEstado[eq.estado] || { texto: eq.estado, clase: "" };
     const fila = document.createElement("div");
     fila.className = "item-fila";
     fila.innerHTML = `
@@ -137,7 +102,6 @@ function pintarEquipos(lista) {
         <h4>${eq.nombre}</h4>
         <p>${eq.marca} ${eq.modelo} · Serie ${eq.serie}</p>
         <p>${eq.ubicacion}</p>
-        <span class="badge-estado ${est.clase}">${est.texto}</span>
       </div>
       <div class="acciones">
         <button onclick="editarEquipo('${eq.id}')" title="Editar">✏️</button>
@@ -168,12 +132,10 @@ function editarEquipo(id) {
   document.getElementById("equipoId").value = eq.id;
   document.getElementById("equipoCodigo").value = eq.codigo;
   document.getElementById("equipoNombre").value = eq.nombre;
-  document.getElementById("equipoDescripcion").value = eq.descripcion || "";
   document.getElementById("equipoMarca").value = eq.marca;
   document.getElementById("equipoModelo").value = eq.modelo;
   document.getElementById("equipoSerie").value = eq.serie;
   document.getElementById("equipoUbicacion").value = eq.ubicacion;
-  document.getElementById("equipoEstado").value = eq.estado;
 
   document.getElementById("tituloFormEquipo").textContent = "Editar equipo";
   document.getElementById("btnGuardarEquipo").textContent = "Actualizar equipo";

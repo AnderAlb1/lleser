@@ -3,14 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
-<title>LleSer</title>
+<title>LleSer · CMMS</title>
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 
 <link rel="stylesheet" href="styles.css">
-
 </head>
 <body>
 
@@ -34,6 +33,7 @@
       <div class="nodo n3" style="top:78%;left:60%;"></div>
       <div class="marca-eyebrow">Sistema de gestión de mantenimiento</div>
       <h1 class="marca-wordmark">Lle<span>Ser</span></h1>
+      <p class="marca-tagline">Control de equipos, órdenes de trabajo y reportes técnicos en un solo lugar, listo para campo y oficina.</p>
     </div>
 
     <div class="panel-form">
@@ -42,7 +42,7 @@
         <span class="remache-bl"></span><span class="remache-br"></span>
 
         <h2>Iniciar sesión</h2>
-        <p class="sub">Ingresa con tu cuenta</p>
+        <p class="sub">Ingresa con tu cuenta de LleSer CMMS</p>
 
         <div class="campo">
           <label class="etiqueta" for="loginEmail">Usuario</label>
@@ -88,7 +88,7 @@
   <div id="overlay" onclick="toggleSidebar()"></div>
 
   <nav id="sidebar">
-    <div class="sidebar-head"><div class="wordmark">Lle<span>Ser</span>
+    <div class="sidebar-head"><div class="wordmark">Lle<span>Ser</span> · CMMS</div></div>
     <div id="menuItems"></div>
   </nav>
 
@@ -136,15 +136,149 @@
         </div>
       </div>
 
-      <!-- Sub-vistas pendientes -->
-      <div id="config-logo" class="oculto"><div class="aviso-proximo">El panel para subir el logo de la empresa se activará en la próxima entrega.</div></div>
-      <div id="config-tecnicos" class="oculto"><div class="aviso-proximo">La gestión de perfiles de técnicos (nombre, cargo, firma) se activará en la próxima entrega.</div></div>
+      <!-- Sub-vista: logo de la empresa -->
+      <div id="config-logo" class="oculto">
+        <div class="panel-config placa">
+          <span class="remache-tl"></span><span class="remache-tr"></span>
+          <span class="remache-bl"></span><span class="remache-br"></span>
+          <span class="etiqueta">Identidad de la empresa</span>
+          <form id="formLogo">
+            <div class="campo">
+              <label class="etiqueta" for="logoEmpresa">Logo (PNG o JPG)</label>
+              <input type="file" id="logoEmpresa" accept="image/png, image/jpeg">
+            </div>
+            <div class="preview-logo" id="previewLogo"><span class="preview-vacio">Sin logo cargado</span></div>
+            <button type="submit" class="btn-primario">Guardar logo</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Sub-vista: técnicos -->
+      <div id="config-tecnicos" class="oculto">
+        <div class="panel-config placa" style="max-width:520px;">
+          <span class="remache-tl"></span><span class="remache-tr"></span>
+          <span class="remache-bl"></span><span class="remache-br"></span>
+          <span class="etiqueta" id="tituloFormTecnico">Nuevo técnico</span>
+          <form id="formTecnico">
+            <input type="hidden" id="tecnicoId" value="">
+            <div class="form-grid">
+              <div class="campo">
+                <label class="etiqueta" for="tecnicoNombre">Nombre completo</label>
+                <input type="text" id="tecnicoNombre" required>
+              </div>
+              <div class="campo">
+                <label class="etiqueta" for="tecnicoCargo">Cargo</label>
+                <input type="text" id="tecnicoCargo" placeholder="Técnico biomédico" required>
+              </div>
+            </div>
+            <div class="campo">
+              <label class="etiqueta" for="tecnicoFirma">Firma (imagen)</label>
+              <input type="file" id="tecnicoFirma" accept="image/png, image/jpeg">
+            </div>
+            <div class="preview-logo" id="previewFirmaTecnico"><span class="preview-vacio">Sin firma cargada</span></div>
+            <div class="fila-botones">
+              <button type="submit" class="btn-primario" id="btnGuardarTecnico">Agregar técnico</button>
+              <button type="button" class="btn-secundario oculto" id="btnCancelarEdicionTecnico" onclick="cancelarEdicionTecnico()">Cancelar edición</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="vista-header" style="margin-top:28px;">
+          <span class="etiqueta">Técnicos registrados</span>
+        </div>
+        <div class="lista-items" id="listaTecnicos"></div>
+      </div>
     </section>
 
-    <!-- ---------- VISTAS futuras (placeholders) ---------- -->
-    <section id="vista-equipos" class="oculto"><div class="aviso-proximo">Módulo de Gestión de Equipos — próximamente.</div></section>
-    <section id="vista-ordenes" class="oculto"><div class="aviso-proximo">Módulo de Órdenes de Trabajo — próximamente.</div></section>
-    <section id="vista-reportes" class="oculto"><div class="aviso-proximo">Módulo de Generar Reporte — próximamente.</div></section>
+    <!-- ---------- VISTA: GESTIÓN DE EQUIPOS ---------- -->
+    <section id="vista-equipos" class="oculto">
+      <div class="vista-header">
+        <div class="eyebrow">Gestión de equipos</div>
+        <h1>Equipos</h1>
+      </div>
+
+      <div class="tabs-config" id="tabsEquipos"></div>
+
+      <!-- Sub-vista: alta / edición / listado -->
+      <div id="equipos-listado">
+        <div class="panel-config placa" style="max-width:640px;">
+          <span class="remache-tl"></span><span class="remache-tr"></span>
+          <span class="remache-bl"></span><span class="remache-br"></span>
+          <span class="etiqueta" id="tituloFormEquipo">Nuevo equipo</span>
+          <form id="formEquipo">
+            <input type="hidden" id="equipoId" value="">
+            <div class="form-grid">
+              <div class="campo">
+                <label class="etiqueta" for="equipoCodigo">Código</label>
+                <input type="text" id="equipoCodigo" readonly placeholder="Se genera automático">
+              </div>
+              <div class="campo">
+                <label class="etiqueta" for="equipoNombre">Nombre</label>
+                <input type="text" id="equipoNombre" required>
+              </div>
+            </div>
+            <div class="campo">
+              <label class="etiqueta" for="equipoDescripcion">Descripción</label>
+              <input type="text" id="equipoDescripcion">
+            </div>
+            <div class="form-grid">
+              <div class="campo">
+                <label class="etiqueta" for="equipoMarca">Marca</label>
+                <input type="text" id="equipoMarca" required>
+              </div>
+              <div class="campo">
+                <label class="etiqueta" for="equipoModelo">Modelo</label>
+                <input type="text" id="equipoModelo" required>
+              </div>
+            </div>
+            <div class="form-grid">
+              <div class="campo">
+                <label class="etiqueta" for="equipoSerie">Serie</label>
+                <input type="text" id="equipoSerie" required>
+              </div>
+              <div class="campo">
+                <label class="etiqueta" for="equipoUbicacion">Ubicación</label>
+                <input type="text" id="equipoUbicacion" required>
+              </div>
+            </div>
+            <div class="campo">
+              <label class="etiqueta" for="equipoEstado">Estado</label>
+              <select id="equipoEstado" required>
+                <option value="OPERATIVO">Operativo</option>
+                <option value="EN_MANTENIMIENTO">En mantenimiento</option>
+                <option value="FUERA_DE_SERVICIO">Fuera de servicio</option>
+              </select>
+            </div>
+            <div class="fila-botones">
+              <button type="submit" class="btn-primario" id="btnGuardarEquipo">Agregar equipo</button>
+              <button type="button" class="btn-secundario oculto" id="btnCancelarEdicionEquipo" onclick="cancelarEdicionEquipo()">Cancelar edición</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="vista-header" style="margin-top:28px;">
+          <span class="etiqueta">Equipos registrados (<span id="contadorEquipos">0</span>)</span>
+        </div>
+        <input type="text" class="input-buscador" id="buscadorEquipos" placeholder="Buscar por código, nombre, marca, modelo, serie o ubicación..." oninput="buscarEquipos(this.value)">
+        <div class="lista-items" id="listaEquipos"></div>
+      </div>
+
+      <!-- Sub-vista: historial por equipo -->
+      <div id="equipos-historial" class="oculto">
+        <div class="panel-config" style="max-width:520px;">
+          <span class="etiqueta">Selecciona un equipo</span>
+          <select id="historialEquipoSelect" onchange="cargarHistorialEquipo(this.value)">
+            <option value="">-- Selecciona un equipo --</option>
+          </select>
+        </div>
+        <div class="vista-header" style="margin-top:24px;">
+          <span class="etiqueta">Reportes del equipo</span>
+        </div>
+        <div class="lista-items" id="listaHistorialEquipo">
+          <div class="aviso-proximo">Selecciona un equipo para ver su historial de reportes.</div>
+        </div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -155,6 +289,7 @@
      ========================================================================== -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-auth-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-firestore-compat.min.js"></script>
 
 <!-- ==========================================================================
      CÓDIGO PROPIO, POR MÓDULO
@@ -167,6 +302,8 @@
 <script src="auth.js"></script>
 <script src="navegacion.js"></script>
 <script src="configuracion.js"></script>
+<script src="tecnicos.js"></script>
+<script src="equipos.js"></script>
 
 </body>
 </html>

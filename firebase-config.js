@@ -16,6 +16,8 @@ const firebaseConfig = {
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
+const db = firebase.firestore();
+
 
 // ⚠️ Debe coincidir EXACTO con el correo de la cuenta Administrador
 // que crees manualmente en Firebase Console → Authentication → Users

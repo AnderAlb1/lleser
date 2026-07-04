@@ -210,16 +210,12 @@
             <div class="form-grid">
               <div class="campo">
                 <label class="etiqueta" for="equipoCodigo">Código</label>
-                <input type="text" id="equipoCodigo" readonly placeholder="Se genera automático">
+                <input type="text" id="equipoCodigo" required>
               </div>
               <div class="campo">
                 <label class="etiqueta" for="equipoNombre">Nombre</label>
                 <input type="text" id="equipoNombre" required>
               </div>
-            </div>
-            <div class="campo">
-              <label class="etiqueta" for="equipoDescripcion">Descripción</label>
-              <input type="text" id="equipoDescripcion">
             </div>
             <div class="form-grid">
               <div class="campo">
@@ -240,14 +236,6 @@
                 <label class="etiqueta" for="equipoUbicacion">Ubicación</label>
                 <input type="text" id="equipoUbicacion" required>
               </div>
-            </div>
-            <div class="campo">
-              <label class="etiqueta" for="equipoEstado">Estado</label>
-              <select id="equipoEstado" required>
-                <option value="OPERATIVO">Operativo</option>
-                <option value="EN_MANTENIMIENTO">En mantenimiento</option>
-                <option value="FUERA_DE_SERVICIO">Fuera de servicio</option>
-              </select>
             </div>
             <div class="fila-botones">
               <button type="submit" class="btn-primario" id="btnGuardarEquipo">Agregar equipo</button>
@@ -290,7 +278,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-auth-compat.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-firestore-compat.min.js"></script>
-
 
 <!-- ==========================================================================
      CÓDIGO PROPIO, POR MÓDULO

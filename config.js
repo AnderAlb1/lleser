@@ -16,10 +16,12 @@
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyCWdkmnT5CmQJTlSsB3rsP04mViiFDFusQ",
   authDomain: "lleser.firebaseapp.com",
+  databaseURL: "https://lleser-default-rtdb.firebaseio.com",
   projectId: "lleser",
   storageBucket: "lleser.firebasestorage.app",
   messagingSenderId: "112125305944",
-  appId: "1:112125305944:web:0d1cfbb93e863412d3562d"
+  appId: "1:112125305944:web:0d1cfbb93e863412d3562d",
+  measurementId: "G-190JLPQDME"
 };
 
 /* ============================================

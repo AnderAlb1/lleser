@@ -41,14 +41,14 @@ import {
   query,
   orderBy,
   serverTimestamp,
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
 
 import {
   ref as storageRef,
   uploadBytes,
   getDownloadURL,
   deleteObject,
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
 
 /* ============================================================================
    0. HELPERS GENÉRICOS

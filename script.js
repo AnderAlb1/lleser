@@ -1,33 +1,19 @@
 /**
  * ============================================
  * LleSer Ltda. - Sistema de Gestión de Mantenimientos
+ * Arquitectura MVC - Script Principal
  * ============================================
  */
 
 // ============================================
-// INICIALIZACIÓN FIREBASE CON MANEJO DE ERRORES
+// INICIALIZACIÓN FIREBASE
 // ============================================
-let db, auth;
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth = firebase.auth();
+const db = firebase.firestore();
 
-try {
-    firebase.initializeApp(FIREBASE_CONFIG);
-    auth = firebase.auth();
-    db = firebase.firestore();
-    db.enablePersistence({ synchronizeTabs: true }).catch(function() {});
-    console.log('Firebase inicializado correctamente');
-} catch (error) {
-    console.error('ERROR CRÍTICO: Firebase no se pudo inicializar:', error);
-    document.getElementById('login-screen').innerHTML = `
-        <div style="background:#FFF;padding:40px;border-radius:16px;max-width:500px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,0.2);">
-            <i class="fas fa-exclamation-triangle" style="font-size:3rem;color:var(--danger);margin-bottom:16px;"></i>
-            <h2 style="margin-bottom:12px;color:var(--danger);">Error de configuración</h2>
-            <p style="color:var(--text-secondary);margin-bottom:16px;">El archivo <strong>config.js</strong> no contiene las credenciales válidas de Firebase.</p>
-            <p style="color:var(--text-muted);font-size:0.85rem;">Abre config.js y reemplaza los valores placeholder con los datos reales de tu proyecto en Firebase Console > Project Settings > General > Your apps > Web app.</p>
-            <p style="color:var(--text-muted);font-size:0.82rem;margin-top:12px;">Error: ${error.message}</p>
-        </div>
-    `;
-    throw error; // Detener ejecución
-}
+// Habilitar persistencia offline para mejor rendimiento
+db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 
 // ============================================
 // ESTADO GLOBAL DE LA APLICACIÓN
@@ -36,12 +22,16 @@ const AppState = {
     currentUser: null,
     userRole: null,
     currentModule: 'equipos-gestion',
+    // Paginación
     equipos: { lastDoc: null, data: [], loading: false, hasMore: true, count: 0 },
     ordenes: { lastDoc: null, data: [], loading: false, hasMore: true, count: 0 },
+    // Fotos temporales para formularios
     tempPhotos: { ro: [], rc: [] },
+    // Reporte guardado recientemente (para generar PDF)
     lastSavedReport: null,
     lastSavedCorrectivo: null,
-    firmaData: { ro: null, rc: null, tc: null }
+    // Firma temporal
+    firmaData: { ro: null, rc: null }
 };
 
 // ============================================
@@ -828,16 +818,9 @@ const Controller = {
                 document.getElementById('app-screen').style.display = 'none';
                 document.getElementById('login-screen').style.display = 'flex';
 
-                // Verificar si hay usuarios registrados// Mostrar registro por defecto, ocultar solo si hay usuarios
-                document.getElementById('register-link').classList.remove('hidden');
-                try {
-                    const hasUsers = await Model.tieneUsuariosRegistrados();
-                    if (hasUsers) {
-                        document.getElementById('register-link').classList.add('hidden');
-                    }
-                } catch (err) {
-                    console.warn('No se pudo verificar usuarios:', err);
-                }
+                // Verificar si hay usuarios registrados
+                const hasUsers = await Model.tieneUsuariosRegistrados();
+                document.getElementById('register-link').classList.toggle('hidden', hasUsers);
             }
         });
 
@@ -948,59 +931,34 @@ const Controller = {
 
     async handleLogin(e) {
         e.preventDefault();
-        e.stopPropagation();
-    
-        const email = document.getElementById('login-email').value.trim();
+        const email = document.getElementById('login-email').value;
         const password = document.getElementById('login-password').value;
         const errorEl = document.getElementById('login-error');
-        const btnLogin = document.getElementById('btn-login');
         errorEl.classList.add('hidden');
-    
-        if (!email || !password) {
-            errorEl.textContent = 'Ingresa correo y contraseña';
-            errorEl.classList.remove('hidden');
-            return;
-        }
-    
-        btnLogin.disabled = true;
-        btnLogin.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ingresando...';
-    
+
         try {
             await auth.signInWithEmailAndPassword(email, password);
-            // onAuthStateChanged se encarga del resto
         } catch (err) {
-            console.error('Error login:', err.code, err.message);
             errorEl.textContent = this.getAuthErrorMessage(err.code);
             errorEl.classList.remove('hidden');
-            btnLogin.disabled = false;
-            btnLogin.innerHTML = '<i class="fas fa-sign-in-alt"></i> Ingresar';
         }
     },
 
     async handleRegister(e) {
         e.preventDefault();
-        e.stopPropagation();
-    
         const name = document.getElementById('reg-name').value.trim();
         const email = document.getElementById('reg-email').value.trim();
         const password = document.getElementById('reg-password').value;
         const errorEl = document.getElementById('register-error');
         errorEl.classList.add('hidden');
-    
-        if (!name || !email || !password) {
-            errorEl.textContent = 'Todos los campos son obligatorios';
-            errorEl.classList.remove('hidden');
-            return;
-        }
-    
+
         try {
             const cred = await auth.createUserWithEmailAndPassword(email, password);
+            // Determinar rol: primer usuario = admin
             const hasUsers = await Model.tieneUsuariosRegistrados();
             const rol = hasUsers ? 'tecnico' : 'admin';
             await Model.crearUsuarioEnDB(cred.user.uid, { nombre: name, email, rol });
-            // onAuthStateChanged se encarga del resto
         } catch (err) {
-            console.error('Error registro:', err.code, err.message);
             errorEl.textContent = this.getAuthErrorMessage(err.code);
             errorEl.classList.remove('hidden');
         }

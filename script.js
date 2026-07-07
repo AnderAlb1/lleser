@@ -3,17 +3,16 @@
    Lógica de la aplicación (SPA sin framework, ES Modules nativos).
 
    ------------------------------------------------------------
-   ESTADO DE CONSTRUCCIÓN — PARTE 1 de N
+   ESTADO DE CONSTRUCCIÓN — PARTE 2 de N
    ------------------------------------------------------------
-   Este archivo se está construyendo por partes. En esta entrega:
-     ✅ Utilidades compartidas (toasts, modales, validaciones)
-     ✅ Módulo COMPLETO: Configuración
-         - Pestaña "Logo de la empresa"
-         - Pestaña "Técnicos" (CRUD + firma con canvas)
+   Este archivo se está construyendo por partes.
 
-   Pendiente para próximas partes (no tocar / no implementado aún):
-     ⏳ Autenticación (login, logout, onAuthStateChanged, roles)
-     ⏳ Router de módulos (sidebar, hamburguesa, hash persistente)
+     ✅ Parte 1 — Utilidades compartidas (toasts, modales, validaciones)
+                  + Módulo Configuración (logo y técnicos con firma)
+     ✅ Parte 2 — Autenticación (login/logout, roles) y
+                  Router de módulos (sidebar, hamburguesa, hash)
+
+   Pendiente para próximas partes:
      ⏳ Módulo Equipos (CRUD, historial, importar Excel)
      ⏳ Módulo Órdenes de trabajo
      ⏳ Módulo Reportes de OT asignadas (+ generación PDF)
@@ -21,19 +20,23 @@
      ⏳ Buscador global
      ⏳ Paginación / lazy loading genérico
 
-   Por eso, al final del archivo, `initConfiguracionModule()` se
-   expone y se llama directamente en DOMContentLoaded SOLO para
-   poder probar este módulo de forma aislada mientras se completan
-   las demás partes. Cuando agreguemos el router (Parte 2), esa
-   llamada se moverá a un init() central.
+   REQUISITO EN FIRESTORE (para que el login funcione):
+   Debe existir una colección "usuarios" con un documento por cada
+   persona que inicia sesión, donde el ID DEL DOCUMENTO es el UID
+   que Firebase Authentication le asigna a ese usuario, y contiene:
+     { nombre: "Juan Pérez", rol: "administrador" | "tecnico" }
+   El usuario y su contraseña se crean en Firebase Authentication
+   (Email/Password); el documento en "usuarios" define su nombre
+   visible y su rol dentro de la app.
    ============================================================ */
 
 import {
-  db, storage,
+  auth, db, storage,
   collection, doc, setDoc, updateDoc, deleteDoc, getDoc,
   onSnapshot, query, orderBy, serverTimestamp,
   storageRef, uploadBytes, getDownloadURL, deleteObject,
-  COLLECTIONS, APP_CONFIG
+  signInWithEmailAndPassword, signOut, onAuthStateChanged,
+  COLLECTIONS, APP_CONFIG, ROLES
 } from "./config.js";
 
 /* ============================================================
@@ -557,12 +560,265 @@ function initConfiguracionModule() {
 }
 
 /* ============================================================
-   ARRANQUE TEMPORAL (solo para probar esta parte de forma aislada)
-   Cuando se agregue el router de módulos y la autenticación
-   (próximas partes), esta llamada se reemplazará por el flujo
-   real: login -> onAuthStateChanged -> mostrar #app -> initApp().
+   ESTADO GLOBAL DE SESIÓN
+   ============================================================ */
+let currentUser = null; // { uid, email, nombre, rol }
+
+// Roles permitidos por módulo (según el prompt original)
+const MODULE_ROLES = {
+  dashboard: [ROLES.ADMIN, ROLES.TECNICO],
+  equipos: [ROLES.ADMIN],
+  ordenes: [ROLES.ADMIN],
+  "reportes-ot": [ROLES.ADMIN, ROLES.TECNICO],
+  "reportes-correctivos": [ROLES.ADMIN, ROLES.TECNICO],
+  configuracion: [ROLES.ADMIN]
+};
+
+// Módulos con lógica ya implementada. Se inicializan UNA sola vez,
+// la primera vez que el usuario entra a cada uno (lazy loading).
+const moduleInitializers = {
+  configuracion: initConfiguracionModule
+  // equipos, ordenes, reportes-ot, reportes-correctivos: próximas partes
+};
+const modulosInicializados = new Set();
+
+/* ============================================================
+   AUTENTICACIÓN
+   ============================================================ */
+
+/** pantalla: "loading" | "login" | "app" */
+function mostrarPantalla(pantalla) {
+  document.getElementById("loading-screen").hidden = pantalla !== "loading";
+  document.getElementById("login-screen").hidden = pantalla !== "login";
+  document.getElementById("app").hidden = pantalla !== "app";
+}
+
+async function obtenerPerfilUsuario(uid) {
+  const snap = await getDoc(doc(db, COLLECTIONS.USUARIOS, uid));
+  return snap.exists() ? snap.data() : null;
+}
+
+function mensajeErrorAuth(code) {
+  const mensajes = {
+    "auth/invalid-email": "El correo electrónico no es válido.",
+    "auth/user-disabled": "Este usuario ha sido deshabilitado.",
+    "auth/user-not-found": "No existe una cuenta con este correo.",
+    "auth/wrong-password": "Contraseña incorrecta.",
+    "auth/invalid-credential": "Correo o contraseña incorrectos.",
+    "auth/too-many-requests": "Demasiados intentos. Intenta más tarde."
+  };
+  return mensajes[code] || "No se pudo iniciar sesión. Intenta nuevamente.";
+}
+
+/** Escucha los cambios de sesión y decide qué pantalla mostrar. */
+function initAuthListener() {
+  onAuthStateChanged(auth, async (user) => {
+    if (!user) {
+      currentUser = null;
+      modulosInicializados.clear();
+      mostrarPantalla("login");
+      return;
+    }
+
+    try {
+      const perfil = await obtenerPerfilUsuario(user.uid);
+      if (!perfil || !perfil.rol) {
+        toast("Tu usuario no tiene un perfil configurado. Contacta al administrador.", "error");
+        await signOut(auth);
+        return;
+      }
+
+      currentUser = {
+        uid: user.uid,
+        email: user.email,
+        nombre: perfil.nombre || user.email,
+        rol: perfil.rol
+      };
+
+      iniciarApp();
+    } catch (err) {
+      console.error("Error al cargar el perfil del usuario:", err);
+      toast("No se pudo cargar tu perfil. Intenta nuevamente.", "error");
+      await signOut(auth);
+    }
+  });
+}
+
+function initLoginForm() {
+  const form = document.getElementById("login-form");
+  const errorEl = document.getElementById("login-error");
+  const submitBtn = document.getElementById("login-submit");
+  const toggleBtn = document.getElementById("toggle-password");
+  const passwordInput = document.getElementById("login-password");
+
+  toggleBtn?.addEventListener("click", () => {
+    const showing = passwordInput.type === "text";
+    passwordInput.type = showing ? "password" : "text";
+    toggleBtn.innerHTML = `<i data-lucide="${showing ? "eye" : "eye-off"}"></i>`;
+    refreshIcons();
+  });
+
+  form?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorEl.hidden = true;
+
+    const email = document.getElementById("login-email").value.trim();
+    const password = document.getElementById("login-password").value;
+
+    setButtonLoading(submitBtn, true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      // onAuthStateChanged se encarga de mostrar la app
+    } catch (err) {
+      console.error("Error de inicio de sesión:", err);
+      errorEl.textContent = mensajeErrorAuth(err.code);
+      errorEl.hidden = false;
+    } finally {
+      setButtonLoading(submitBtn, false);
+    }
+  });
+}
+
+function initLogout() {
+  document.getElementById("logout-btn")?.addEventListener("click", () => {
+    confirmAction({
+      title: "Cerrar sesión",
+      message: "¿Seguro que deseas cerrar sesión?",
+      confirmLabel: "Cerrar sesión",
+      onConfirm: async () => {
+        await signOut(auth);
+        window.location.hash = "";
+      }
+    });
+  });
+}
+
+/* ============================================================
+   ROUTER DE MÓDULOS (sidebar + hash persistente)
+   ============================================================ */
+
+function aplicarVisibilidadPorRol() {
+  document.querySelectorAll("[data-role-visibility]").forEach((el) => {
+    const permitidos = el.dataset.roleVisibility.split(",").map((r) => r.trim());
+    el.hidden = !permitidos.includes(currentUser.rol);
+  });
+}
+
+function moduloPermitido(modulo) {
+  const permitidos = MODULE_ROLES[modulo];
+  return permitidos ? permitidos.includes(currentUser.rol) : false;
+}
+
+function primerModuloDisponible() {
+  return Object.keys(MODULE_ROLES).find((m) => moduloPermitido(m)) || "dashboard";
+}
+
+/** Cambia de módulo activo, actualiza el hash de la URL y hace lazy-init. */
+function irAModulo(modulo, { updateHash = true } = {}) {
+  if (!moduloPermitido(modulo)) {
+    toast("No tienes acceso a ese módulo.", "error");
+    modulo = primerModuloDisponible();
+  }
+
+  document.querySelectorAll(".nav-item[data-module]").forEach((btn) => {
+    btn.classList.toggle("is-active", btn.dataset.module === modulo);
+  });
+
+  document.querySelectorAll(".module-view[data-module]").forEach((view) => {
+    view.classList.toggle("is-active", view.dataset.module === modulo);
+  });
+
+  const activeBtn = document.querySelector(`.nav-item[data-module="${modulo}"]`);
+  document.getElementById("topbar-title").textContent =
+    activeBtn?.querySelector("span")?.textContent || "Inicio";
+
+  if (updateHash) window.location.hash = modulo;
+
+  cerrarSidebarMovil();
+
+  // Lazy loading: cada módulo solo inicializa sus listeners/datos una vez
+  if (!modulosInicializados.has(modulo) && moduleInitializers[modulo]) {
+    moduleInitializers[modulo]();
+    modulosInicializados.add(modulo);
+  }
+}
+
+function moduloInicial() {
+  const desdeHash = window.location.hash.replace("#", "");
+  if (desdeHash && moduloPermitido(desdeHash)) return desdeHash;
+  return primerModuloDisponible();
+}
+
+function initRouter() {
+  document.querySelectorAll(".nav-item[data-module]").forEach((btn) => {
+    btn.addEventListener("click", () => irAModulo(btn.dataset.module));
+  });
+
+  // Permite que el botón "atrás/adelante" del navegador y F5 respeten el módulo activo
+  window.addEventListener("hashchange", () => {
+    const modulo = window.location.hash.replace("#", "") || "dashboard";
+    irAModulo(modulo, { updateHash: false });
+  });
+}
+
+/* ---------- Sidebar móvil (botón hamburguesa) ---------- */
+function initSidebarMovil() {
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebar-overlay");
+  const hamburger = document.getElementById("hamburger-btn");
+  const closeBtn = document.getElementById("sidebar-close");
+
+  const abrir = () => {
+    sidebar.classList.add("is-open");
+    overlay.hidden = false;
+    requestAnimationFrame(() => overlay.classList.add("is-visible"));
+    hamburger.setAttribute("aria-expanded", "true");
+  };
+
+  hamburger?.addEventListener("click", abrir);
+  overlay?.addEventListener("click", cerrarSidebarMovil);
+  closeBtn?.addEventListener("click", cerrarSidebarMovil);
+}
+
+function cerrarSidebarMovil() {
+  const sidebar = document.getElementById("sidebar");
+  const overlay = document.getElementById("sidebar-overlay");
+  const hamburger = document.getElementById("hamburger-btn");
+  if (!sidebar) return;
+
+  sidebar.classList.remove("is-open");
+  overlay.classList.remove("is-visible");
+  hamburger.setAttribute("aria-expanded", "false");
+  setTimeout(() => { overlay.hidden = true; }, 200);
+}
+
+/* ============================================================
+   ARRANQUE DE LA APLICACIÓN (tras autenticación exitosa)
+   ============================================================ */
+function iniciarApp() {
+  aplicarVisibilidadPorRol();
+
+  document.getElementById("sidebar-user-name").textContent = currentUser.nombre;
+  document.getElementById("sidebar-user-avatar").textContent =
+    currentUser.nombre.trim().charAt(0).toUpperCase();
+
+  const rolLabel = currentUser.rol === ROLES.ADMIN ? "Administrador" : "Técnico";
+  document.getElementById("sidebar-user-role").textContent = rolLabel;
+  document.getElementById("topbar-role-badge").textContent = rolLabel;
+
+  mostrarPantalla("app");
+  irAModulo(moduloInicial(), { updateHash: true });
+  refreshIcons();
+}
+
+/* ============================================================
+   ARRANQUE GENERAL
    ============================================================ */
 document.addEventListener("DOMContentLoaded", () => {
   refreshIcons();
-  initConfiguracionModule();
+  initLoginForm();
+  initLogout();
+  initRouter();
+  initSidebarMovil();
+  initAuthListener(); // decide: loading -> login, o loading -> app
 });

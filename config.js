@@ -1,27 +1,61 @@
 /* ============================================================
    config.js — LleSer Ltda.
-   Configuración e inicialización de Firebase (Firestore, Auth,
-   Storage) + constantes globales de la aplicación.
+   Inicialización de Firebase (SDK modular v10 vía CDN) + re-export
+   de las funciones que script.js necesita, para tener un único
+   punto de configuración en todo el proyecto.
+
+   Se carga como <script type="module" src="config.js"> en index.html,
+   por lo tanto usa import/export nativos de ES Modules (sin bundler).
 
    IMPORTANTE:
-   1. Reemplaza el objeto firebaseConfig con las credenciales de
-      TU proyecto (Firebase Console > Configuración del proyecto
-      > Tus apps > SDK de configuración).
-   2. Este archivo debe cargarse en index.html DESPUÉS de los
-      scripts compat de Firebase y ANTES de script.js:
-
-      <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-      <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
-      <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-      <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-storage-compat.js"></script>
-      <script src="config.js"></script>
-      <script src="script.js"></script>
-
-   3. En Firebase Console habilita:
+   1. Reemplaza `firebaseConfig` con las credenciales de TU proyecto
+      (Firebase Console > Configuración del proyecto > Tus apps).
+   2. En Firebase Console habilita:
       - Authentication > Email/Password
-      - Firestore Database (modo producción)
+      - Firestore Database
       - Storage
    ============================================================ */
+
+import {
+  initializeApp
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+import {
+  getFirestore,
+  enableIndexedDbPersistence,
+  collection,
+  doc,
+  addDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  limit,
+  startAfter,
+  serverTimestamp,
+  Timestamp,
+  runTransaction
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+import {
+  getStorage,
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
 // -------------------- CREDENCIALES FIREBASE --------------------
 const firebaseConfig = {
@@ -34,19 +68,33 @@ const firebaseConfig = {
 };
 
 // -------------------- INICIALIZACIÓN --------------------
-firebase.initializeApp(firebaseConfig);
+const firebaseApp = initializeApp(firebaseConfig);
 
-const auth = firebase.auth();
-const db = firebase.firestore();
-const storage = firebase.storage();
+export const auth = getAuth(firebaseApp);
+export const db = getFirestore(firebaseApp);
+export const storage = getStorage(firebaseApp);
 
-// Habilita caché offline para mejorar el rendimiento
-db.enablePersistence().catch((err) => {
+// Caché offline (mejora rendimiento y permite trabajar con conexión inestable)
+enableIndexedDbPersistence(db).catch((err) => {
   console.warn("Persistencia offline no disponible:", err.code);
 });
 
+// -------------------- RE-EXPORTS (Firestore / Storage / Auth) --------------------
+// Se re-exportan aquí para que script.js importe TODO desde config.js
+// y no tenga que repetir URLs de CDN en cada módulo.
+export {
+  // Firestore
+  collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
+  getDoc, getDocs, onSnapshot, query, where, orderBy, limit,
+  startAfter, serverTimestamp, Timestamp, runTransaction,
+  // Storage
+  storageRef, uploadBytes, getDownloadURL, deleteObject,
+  // Auth
+  signInWithEmailAndPassword, signOut, onAuthStateChanged
+};
+
 // -------------------- COLECCIONES FIRESTORE --------------------
-const COLLECTIONS = {
+export const COLLECTIONS = {
   USUARIOS: "usuarios",
   EQUIPOS: "equipos",
   ORDENES: "ordenesTrabajo",
@@ -58,13 +106,13 @@ const COLLECTIONS = {
 };
 
 // -------------------- ROLES DE USUARIO --------------------
-const ROLES = {
+export const ROLES = {
   ADMIN: "administrador",
   TECNICO: "tecnico"
 };
 
 // -------------------- TIPOS DE ORDEN --------------------
-const TIPOS_ORDEN = {
+export const TIPOS_ORDEN = {
   PREVENTIVO: "Preventivo",
   CORRECTIVO: "Correctivo",
   DIAGNOSTICO: "Diagnóstico",
@@ -72,30 +120,29 @@ const TIPOS_ORDEN = {
 };
 
 // -------------------- CONSTANTES DE LA APP --------------------
-const APP_CONFIG = {
+export const APP_CONFIG = {
   nombreEmpresa: "LleSer Ltda.",
-  colorLogoLle: "#FFFFFF",
-  colorLogoSer: "#1E88E5",
   itemsPorPagina: 15,
   maxTamanoImagenMB: 5,
-  storagePathLogo: "config/logo",
-  storagePathEvidencias: "evidencias",
-  storagePathFirmas: "firmas"
+  configDocId: "general",          // doc en COLLECTIONS.CONFIGURACION
+  storagePathLogo: "config/logo",  // carpeta logo en Storage
+  storagePathFirmas: "firmas",     // carpeta firmas técnicos en Storage
+  storagePathEvidencias: "evidencias"
 };
 
 // -------------------- UTILIDAD: CONTADORES ATÓMICOS --------------------
 /**
- * Genera un número consecutivo atómico (para órdenes de trabajo
- * y reportes correctivos) usando una transacción de Firestore,
- * evitando colisiones por concurrencia.
+ * Genera un número consecutivo atómico (para órdenes de trabajo y
+ * reportes correctivos) usando una transacción de Firestore, evitando
+ * colisiones por concurrencia entre varios usuarios a la vez.
  * @param {string} nombreContador - clave del documento contador
  * @returns {Promise<number>} siguiente número consecutivo
  */
-async function obtenerSiguienteConsecutivo(nombreContador) {
-  const ref = db.collection(COLLECTIONS.CONTADORES).doc(nombreContador);
-  return db.runTransaction(async (transaction) => {
-    const doc = await transaction.get(ref);
-    const actual = doc.exists ? doc.data().valor : 0;
+export async function obtenerSiguienteConsecutivo(nombreContador) {
+  const ref = doc(db, COLLECTIONS.CONTADORES, nombreContador);
+  return runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(ref);
+    const actual = snap.exists() ? snap.data().valor : 0;
     const siguiente = actual + 1;
     transaction.set(ref, { valor: siguiente }, { merge: true });
     return siguiente;

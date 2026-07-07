@@ -1,63 +1,43 @@
-/* ============================================================
-   config.js — LleSer Ltda.
-   Inicialización de Firebase (SDK modular v10 vía CDN) + re-export
-   de las funciones que script.js necesita, para tener un único
-   punto de configuración en todo el proyecto.
+/* ============================================================================
+   LleSer Ltda. — Sistema de gestión de mantenimientos
+   config.js
+   ----------------------------------------------------------------------------
+   Responsabilidades de este archivo:
+   1. Inicializar Firebase (App, Auth, Firestore, Storage).
+   2. Definir constantes compartidas: nombres de colecciones y roles.
+   3. Exponer helpers de autenticación/roles que usará script.js:
+      - onAuthChange()          → suscripción al estado de sesión
+      - login() / logout()
+      - getUserProfile()        → trae { nombre, rol, ... } desde Firestore
+      - createUserWithRole()    → permite al admin crear usuarios (admin/técnico)
+        sin cerrar su propia sesión (usa una app secundaria de Firebase).
 
-   Se carga como <script type="module" src="config.js"> en index.html,
-   por lo tanto usa import/export nativos de ES Modules (sin bundler).
+   IMPORTANTE: este archivo se importa como módulo ES desde index.html:
+   <script type="module" src="config.js"></script>
+   ============================================================================ */
 
-   IMPORTANTE:
-   1. Reemplaza `firebaseConfig` con las credenciales de TU proyecto
-      (Firebase Console > Configuración del proyecto > Tus apps).
-   2. En Firebase Console habilita:
-      - Authentication > Email/Password
-      - Firestore Database
-      - Storage
-   ============================================================ */
-
-import {
-  initializeApp
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-
+import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
   getAuth,
+  onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged
+  createUserWithEmailAndPassword,
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-
 import {
   getFirestore,
-  enableIndexedDbPersistence,
-  collection,
   doc,
-  addDoc,
-  setDoc,
-  updateDoc,
-  deleteDoc,
   getDoc,
-  getDocs,
-  onSnapshot,
-  query,
-  where,
-  orderBy,
-  limit,
-  startAfter,
+  setDoc,
   serverTimestamp,
-  Timestamp,
-  runTransaction
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getStorage } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
-import {
-  getStorage,
-  ref as storageRef,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
-
-// -------------------- CREDENCIALES FIREBASE --------------------
+/* ---------------------------------------------------------------------------
+   1. CONFIGURACIÓN DE FIREBASE
+   ⚠️ REEMPLAZA estos valores por los de tu proyecto:
+   Firebase Console → ⚙ Configuración del proyecto → Tus apps → SDK setup and configuration
+--------------------------------------------------------------------------- */
 const firebaseConfig = {
   apiKey: "AIzaSyCWdkmnT5CmQJTlSsB3rsP04mViiFDFusQ",
   authDomain: "lleser.firebaseapp.com",
@@ -67,84 +47,138 @@ const firebaseConfig = {
   appId: "1:112125305944:web:0d1cfbb93e863412d3562d",
 };
 
-// -------------------- INICIALIZACIÓN --------------------
-const firebaseApp = initializeApp(firebaseConfig);
+/* App principal: mantiene la sesión de quien está usando la aplicación */
+const app = initializeApp(firebaseConfig);
 
-export const auth = getAuth(firebaseApp);
-export const db = getFirestore(firebaseApp);
-export const storage = getStorage(firebaseApp);
+/* App secundaria: se usa SOLO para crear usuarios nuevos desde el panel de
+   administración. Firebase Auth inicia sesión automáticamente como el
+   usuario recién creado en la instancia donde se ejecuta createUser...,
+   así que aislamos esa operación en una app aparte para no botar la sesión
+   del administrador que está creando la cuenta. */
+const secondaryApp =
+  getApps().find((a) => a.name === "secondary") ||
+  initializeApp(firebaseConfig, "secondary");
 
-// Caché offline (mejora rendimiento y permite trabajar con conexión inestable)
-enableIndexedDbPersistence(db).catch((err) => {
-  console.warn("Persistencia offline no disponible:", err.code);
-});
+export const auth = getAuth(app);
+const secondaryAuth = getAuth(secondaryApp);
+export const db = getFirestore(app);
+export const storage = getStorage(app);
 
-// -------------------- RE-EXPORTS (Firestore / Storage / Auth) --------------------
-// Se re-exportan aquí para que script.js importe TODO desde config.js
-// y no tenga que repetir URLs de CDN en cada módulo.
-export {
-  // Firestore
-  collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
-  getDoc, getDocs, onSnapshot, query, where, orderBy, limit,
-  startAfter, serverTimestamp, Timestamp, runTransaction,
-  // Storage
-  storageRef, uploadBytes, getDownloadURL, deleteObject,
-  // Auth
-  signInWithEmailAndPassword, signOut, onAuthStateChanged
-};
+/* ---------------------------------------------------------------------------
+   2. CONSTANTES COMPARTIDAS
+--------------------------------------------------------------------------- */
 
-// -------------------- COLECCIONES FIRESTORE --------------------
+// Nombres de colecciones de Firestore — únicos por módulo, en un solo lugar
+// para evitar strings mágicos repetidos en script.js.
 export const COLLECTIONS = {
   USUARIOS: "usuarios",
   EQUIPOS: "equipos",
-  ORDENES: "ordenesTrabajo",
-  REPORTES_PREVENTIVOS: "reportesPreventivos",
-  REPORTES_CORRECTIVOS: "reportesCorrectivos",
-  TECNICOS: "tecnicos",
-  CONFIGURACION: "configuracion",
-  CONTADORES: "contadores"
+  ORDENES: "ordenes",
+  REPORTES: "reportes",           // reportes de órdenes de trabajo asignadas
+  CORRECTIVOS: "correctivos",     // reportes de mantenimiento correctivo
+  TECNICOS: "tecnicos",           // ficha técnica (nombre/cargo/firma) — puede
+                                   // vincularse o no a un usuario con acceso
+  CONFIGURACION: "configuracion", // doc único, ej: configuracion/general (logo)
+  CONTADORES: "contadores",       // consecutivos automáticos (OT y correctivos)
 };
 
-// -------------------- ROLES DE USUARIO --------------------
 export const ROLES = {
-  ADMIN: "administrador",
-  TECNICO: "tecnico"
+  ADMIN: "admin",
+  TECNICO: "tecnico",
 };
 
-// -------------------- TIPOS DE ORDEN --------------------
-export const TIPOS_ORDEN = {
-  PREVENTIVO: "Preventivo",
-  CORRECTIVO: "Correctivo",
-  DIAGNOSTICO: "Diagnóstico",
-  INSTALACION: "Instalación"
-};
+/* ---------------------------------------------------------------------------
+   3. AUTENTICACIÓN
+--------------------------------------------------------------------------- */
 
-// -------------------- CONSTANTES DE LA APP --------------------
-export const APP_CONFIG = {
-  nombreEmpresa: "LleSer Ltda.",
-  itemsPorPagina: 15,
-  maxTamanoImagenMB: 5,
-  configDocId: "general",          // doc en COLLECTIONS.CONFIGURACION
-  storagePathLogo: "config/logo",  // carpeta logo en Storage
-  storagePathFirmas: "firmas",     // carpeta firmas técnicos en Storage
-  storagePathEvidencias: "evidencias"
-};
-
-// -------------------- UTILIDAD: CONTADORES ATÓMICOS --------------------
 /**
- * Genera un número consecutivo atómico (para órdenes de trabajo y
- * reportes correctivos) usando una transacción de Firestore, evitando
- * colisiones por concurrencia entre varios usuarios a la vez.
- * @param {string} nombreContador - clave del documento contador
- * @returns {Promise<number>} siguiente número consecutivo
+ * Suscribe un callback a los cambios de sesión.
+ * El callback recibe (firebaseUser | null).
+ * Devuelve la función de "unsubscribe" por si se necesita.
  */
-export async function obtenerSiguienteConsecutivo(nombreContador) {
-  const ref = doc(db, COLLECTIONS.CONTADORES, nombreContador);
-  return runTransaction(db, async (transaction) => {
-    const snap = await transaction.get(ref);
-    const actual = snap.exists() ? snap.data().valor : 0;
-    const siguiente = actual + 1;
-    transaction.set(ref, { valor: siguiente }, { merge: true });
-    return siguiente;
+export function onAuthChange(callback) {
+  return onAuthStateChanged(auth, callback);
+}
+
+/**
+ * Inicia sesión con correo y contraseña.
+ * Lanza el error de Firebase tal cual para que script.js decida el mensaje
+ * a mostrar (credenciales inválidas, usuario deshabilitado, etc.).
+ */
+export async function login(email, password) {
+  const credential = await signInWithEmailAndPassword(auth, email, password);
+  return credential.user;
+}
+
+export async function logout() {
+  await signOut(auth);
+}
+
+/* ---------------------------------------------------------------------------
+   4. PERFILES DE USUARIO Y ROLES
+   Estructura esperada en Firestore:
+     usuarios/{uid} = {
+       nombre: string,
+       correo: string,
+       rol: "admin" | "tecnico",
+       activo: boolean,
+       creadoEn: timestamp
+     }
+   El ID del documento DEBE ser el mismo UID que genera Firebase Authentication.
+   Esto es lo que hace posible aplicar reglas de seguridad en Firestore del
+   tipo: request.auth.uid == userId, y es también el patrón que usa
+   createUserWithRole() más abajo.
+
+   Tu usuario admin@lleser.com ya existe en Firestore: si el documento fue
+   creado con un ID distinto al UID de Authentication (por ejemplo, un ID
+   autogenerado o el correo como ID), getUserProfile() no lo va a encontrar.
+   En ese caso lo más simple es: entrar una vez a Authentication, copiar el
+   UID real de admin@lleser.com, y usarlo como ID del documento en
+   usuarios/{uid} (o decirme y ajustamos la búsqueda por campo "correo").
+--------------------------------------------------------------------------- */
+
+/**
+ * Trae el perfil (nombre, correo, rol, activo) del usuario autenticado.
+ * Devuelve null si no existe el documento en Firestore.
+ */
+export async function getUserProfile(uid) {
+  const ref = doc(db, COLLECTIONS.USUARIOS, uid);
+  const snap = await getDoc(ref);
+  return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+}
+
+/**
+ * Crea un usuario nuevo (Authentication + documento de perfil en Firestore)
+ * sin afectar la sesión del administrador que ejecuta la acción.
+ * Solo debe llamarse desde una pantalla protegida para rol === ROLES.ADMIN.
+ *
+ * @param {Object} datos
+ * @param {string} datos.nombre
+ * @param {string} datos.correo
+ * @param {string} datos.password
+ * @param {"admin"|"tecnico"} datos.rol
+ */
+export async function createUserWithRole({ nombre, correo, password, rol }) {
+  if (![ROLES.ADMIN, ROLES.TECNICO].includes(rol)) {
+    throw new Error("Rol inválido. Debe ser 'admin' o 'tecnico'.");
+  }
+
+  // 1. Crear la cuenta en la instancia secundaria (no afecta la sesión activa).
+  const credential = await createUserWithEmailAndPassword(secondaryAuth, correo, password);
+  const newUid = credential.user.uid;
+
+  // 2. Guardar el perfil/rol en Firestore, usando el UID como ID del documento.
+  await setDoc(doc(db, COLLECTIONS.USUARIOS, newUid), {
+    nombre,
+    correo,
+    rol,
+    activo: true,
+    creadoEn: serverTimestamp(),
   });
+
+  // 3. Cerrar la sesión de la instancia secundaria para dejarla limpia
+  //    para la siguiente creación de usuario.
+  await signOut(secondaryAuth);
+
+  return newUid;
 }

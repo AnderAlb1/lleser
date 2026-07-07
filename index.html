@@ -42,56 +42,41 @@
                 <div class="logo-text"><span class="lle">Lle</span><span class="ser">Ser</span></div>
                 <div class="logo-sub">Gestión de Mantenimientos</div>
             </div>
-
-            <!-- Formulario de Login -->
-            <div id="login-form-container">
-                <h2>Iniciar sesión</h2>
-                <p class="login-subtitle">Accede al sistema de gestión</p>
-                <form id="login-form">
-                    <div class="form-group">
-                        <label for="login-email">Correo electrónico</label>
-                        <input type="email" id="login-email" class="form-control" placeholder="correo@empresa.com" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="login-password">Contraseña</label>
-                        <input type="password" id="login-password" class="form-control" placeholder="Tu contraseña" required>
-                    </div>
-                    <div id="login-error" class="hidden" style="color:var(--danger);font-size:0.85rem;margin-bottom:12px;text-align:center;"></div>
-                    <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-login">
-                        <i class="fas fa-sign-in-alt"></i> Ingresar
-                    </button>
-                </form>
-                <p id="register-link" class="hidden text-center mt-16" style="font-size:0.88rem;color:var(--text-muted);">
-                    No tienes cuenta? <a href="#" id="show-register" style="color:var(--primary);font-weight:600;">Regístrate aquí</a>
-                </p>
-            </div>
-
-            <!-- Formulario de Registro -->
-            <div id="register-form-container" class="hidden">
-                <h2>Crear cuenta</h2>
-                <p class="login-subtitle">Registro de nuevo usuario</p>
-                <form id="register-form">
-                    <div class="form-group">
-                        <label for="reg-name">Nombre completo</label>
-                        <input type="text" id="reg-name" class="form-control" placeholder="Tu nombre" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="reg-email">Correo electrónico</label>
-                        <input type="email" id="reg-email" class="form-control" placeholder="correo@empresa.com" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="reg-password">Contraseña (mín. 6 caracteres)</label>
-                        <input type="password" id="reg-password" class="form-control" placeholder="Tu contraseña" required minlength="6">
-                    </div>
-                    <div id="register-error" class="hidden" style="color:var(--danger);font-size:0.85rem;margin-bottom:12px;text-align:center;"></div>
-                    <button type="submit" class="btn btn-primary btn-block btn-lg">
-                        <i class="fas fa-user-plus"></i> Registrarse
-                    </button>
-                </form>
-                <p class="text-center mt-16" style="font-size:0.88rem;color:var(--text-muted);">
-                    Ya tienes cuenta? <a href="#" id="show-login" style="color:var(--primary);font-weight:600;">Inicia sesión</a>
-                </p>
-            </div>
+            <!-- Reemplaza el formulario de LOGIN existente por este: -->
+            <form id="login-form" onsubmit="return false;">
+                <div class="form-group">
+                    <label for="login-email">Correo electrónico</label>
+                    <input type="email" id="login-email" class="form-control" placeholder="correo@empresa.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Contraseña</label>
+                    <input type="password" id="login-password" class="form-control" placeholder="Tu contraseña" required>
+                </div>
+                <div id="login-error" class="hidden" style="color:var(--danger);font-size:0.85rem;margin-bottom:12px;text-align:center;"></div>
+                <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-login">
+                    <i class="fas fa-sign-in-alt"></i> Ingresar
+                </button>
+            </form>
+            
+            <!-- Reemplaza el formulario de REGISTRO existente por este: -->
+            <form id="register-form" onsubmit="return false;">
+                <div class="form-group">
+                    <label for="reg-name">Nombre completo</label>
+                    <input type="text" id="reg-name" class="form-control" placeholder="Tu nombre" required>
+                </div>
+                <div class="form-group">
+                    <label for="reg-email">Correo electrónico</label>
+                    <input type="email" id="reg-email" class="form-control" placeholder="correo@empresa.com" required>
+                </div>
+                <div class="form-group">
+                    <label for="reg-password">Contraseña (mín. 6 caracteres)</label>
+                    <input type="password" id="reg-password" class="form-control" placeholder="Tu contraseña" required minlength="6">
+                </div>
+                <div id="register-error" class="hidden" style="color:var(--danger);font-size:0.85rem;margin-bottom:12px;text-align:center;"></div>
+                <button type="submit" class="btn btn-primary btn-block btn-lg">
+                    <i class="fas fa-user-plus"></i> Registrarse
+                </button>
+            </form>
         </div>
     </div>
 

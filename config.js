@@ -23,7 +23,6 @@ const FIREBASE_CONFIG = {
   appId: "1:112125305944:web:0d1cfbb93e863412d3562d",
   measurementId: "G-190JLPQDME"
 };
-firebase.initializeApp(FIREBASE_CONFIG);
 /* ============================================
    Configuración general de la aplicación
    ============================================ */

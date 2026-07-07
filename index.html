@@ -1,593 +1,727 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="LleSer Ltda. - Sistema de Gestión de Mantenimientos Industriales">
-    <meta name="theme-color" content="#0B1A2B">
-    <title>LleSer Ltda. - Gestión de Mantenimientos</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<title>LleSer Ltda. · Gestión de Mantenimientos</title>
+<meta name="description" content="Sistema de gestión de mantenimientos preventivos y correctivos de equipos industriales — LleSer Ltda.">
+<meta name="theme-color" content="#0F2A43">
 
-    <!-- Fuentes -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- ============================================================
+     ERUDA — Consola de depuración para dispositivos móviles.
+     Útil durante desarrollo/pruebas en tablets y celulares donde
+     no hay acceso directo a devtools. RETIRAR antes de producción
+     final (o dejar detrás de una bandera en config.js).
+     ============================================================ -->
+<script src="https://cdn.jsdelivr.net/npm/eruda@3.0.1/eruda.min.js"></script>
+<script>eruda.init();</script>
 
-    <!-- Iconos -->
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<!-- Iconografía: Lucide Icons -->
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js" defer></script>
 
-    <!-- Firebase -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<!-- Tipografías: Big Shoulders Display (rótulos tipo placa industrial) + Inter (UI) + IBM Plex Mono (códigos/consecutivos) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 
-    <!-- jsPDF para generación de PDFs -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- Firebase (SDK modular v10, vía CDN) -->
+<script type="module">
+  // Los SDK de Firebase se inicializan en config.js. Este bloque solo
+  // deja constancia de la versión usada para mantener consistencia
+  // en las importaciones dentro de config.js y script.js.
+  // https://www.gstatic.com/firebasejs/10.x/firebase-app.js
+</script>
 
-    <!-- SheetJS para importación de Excel -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-
-    <!-- Configuración -->
-    <script src="config.js"></script>
-
-    <!-- Estilos -->
-    <link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
 
-    <!-- ============================================
-         PANTALLA DE LOGIN / REGISTRO
-         ============================================ -->
-    <div id="login-screen">
-        <div class="login-card">
-            <div class="login-logo">
-                <div class="logo-text"><span class="lle">Lle</span><span class="ser">Ser</span></div>
-                <div class="logo-sub">Gestión de Mantenimientos</div>
-            </div>
+<!-- ============================================================
+     PANTALLA DE CARGA INICIAL
+     ============================================================ -->
+<div id="loading-screen" class="loading-screen" aria-live="polite">
+  <div class="loading-plate">
+    <span class="logo-mark"><span class="logo-lle">Lle</span><span class="logo-ser">Ser</span></span>
+    <div class="loading-bar"><div class="loading-bar-fill"></div></div>
+    <p class="loading-text">Cargando sistema…</p>
+  </div>
+</div>
 
-            <!-- Formulario de Login -->
-            <div id="login-form-container">
-                <h2>Iniciar sesión</h2>
-                <p class="login-subtitle">Accede al sistema de gestión</p>
-                <form id="login-form">
-                    <div class="form-group">
-                        <label for="login-email">Correo electrónico</label>
-                        <input type="email" id="login-email" class="form-control" placeholder="correo@empresa.com" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="login-password">Contraseña</label>
-                        <input type="password" id="login-password" class="form-control" placeholder="Tu contraseña" required>
-                    </div>
-                    <div id="login-error" class="hidden" style="color:var(--danger);font-size:0.85rem;margin-bottom:12px;text-align:center;"></div>
-                    <button type="submit" class="btn btn-primary btn-block btn-lg" id="btn-login">
-                        <i class="fas fa-sign-in-alt"></i> Ingresar
-                    </button>
-                </form>
-                <p id="register-link" class="hidden text-center mt-16" style="font-size:0.88rem;color:var(--text-muted);">
-                    No tienes cuenta? <a href="#" id="show-register" style="color:var(--primary);font-weight:600;">Regístrate aquí</a>
-                </p>
-            </div>
-
-            <!-- Formulario de Registro -->
-            <div id="register-form-container" class="hidden">
-                <h2>Crear cuenta</h2>
-                <p class="login-subtitle">Registro de nuevo usuario</p>
-                <form id="register-form">
-                    <div class="form-group">
-                        <label for="reg-name">Nombre completo</label>
-                        <input type="text" id="reg-name" class="form-control" placeholder="Tu nombre" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="reg-email">Correo electrónico</label>
-                        <input type="email" id="reg-email" class="form-control" placeholder="correo@empresa.com" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="reg-password">Contraseña (mín. 6 caracteres)</label>
-                        <input type="password" id="reg-password" class="form-control" placeholder="Tu contraseña" required minlength="6">
-                    </div>
-                    <div id="register-error" class="hidden" style="color:var(--danger);font-size:0.85rem;margin-bottom:12px;text-align:center;"></div>
-                    <button type="submit" class="btn btn-primary btn-block btn-lg">
-                        <i class="fas fa-user-plus"></i> Registrarse
-                    </button>
-                </form>
-                <p class="text-center mt-16" style="font-size:0.88rem;color:var(--text-muted);">
-                    Ya tienes cuenta? <a href="#" id="show-login" style="color:var(--primary);font-weight:600;">Inicia sesión</a>
-                </p>
-            </div>
-        </div>
+<!-- ============================================================
+     PANTALLA DE AUTENTICACIÓN
+     ============================================================ -->
+<main id="login-screen" class="auth-screen" hidden>
+  <div class="auth-card">
+    <div class="auth-brand">
+      <span class="logo-mark logo-mark--lg"><span class="logo-lle">Lle</span><span class="logo-ser">Ser</span></span>
+      <p class="auth-brand-sub">Gestión de mantenimientos industriales</p>
     </div>
 
-    <!-- ============================================
-         APLICACIÓN PRINCIPAL
-         ============================================ -->
-    <div id="app-screen">
-        <div class="app-layout">
+    <form id="login-form" class="auth-form" novalidate>
+      <div class="field">
+        <label for="login-email">Correo electrónico</label>
+        <input type="email" id="login-email" name="email" autocomplete="username" required placeholder="nombre@lleser.com">
+      </div>
 
-            <!-- Overlay para sidebar móvil -->
-            <div id="sidebar-overlay" class="sidebar-overlay"></div>
-
-            <!-- Sidebar -->
-            <aside id="sidebar" class="sidebar">
-                <div class="sidebar-header">
-                    <div class="sidebar-logo">
-                        <div class="logo-icon">LS</div>
-                        <div>
-                            <div class="logo-text"><span class="lle">Lle</span><span class="ser">Ser</span></div>
-                            <span class="ltda">LTDA.</span>
-                        </div>
-                    </div>
-                </div>
-
-                <nav class="sidebar-nav">
-                    <div class="nav-section-title">Principal</div>
-
-                    <!-- Equipos -->
-                    <div class="nav-item">
-                        <a class="nav-link" data-toggle="submenu" data-target="submenu-equipos">
-                            <i class="fas fa-cogs"></i> Equipos
-                            <i class="fas fa-chevron-right nav-arrow"></i>
-                        </a>
-                        <ul id="submenu-equipos" class="submenu">
-                            <li class="nav-item">
-                                <a class="nav-link" data-module="equipos-gestion">Gestión</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" data-module="equipos-historial">Historial</a>
-                            </li>
-                        </ul>
-                    </div>
-
-                    <!-- Órdenes de trabajo -->
-                    <div class="nav-item">
-                        <a class="nav-link" data-module="ordenes">
-                            <i class="fas fa-clipboard-list"></i> Órdenes de trabajo
-                        </a>
-                    </div>
-
-                    <div class="nav-section-title">Reportes</div>
-
-                    <!-- Reportes de órdenes -->
-                    <div class="nav-item">
-                        <a class="nav-link" data-module="reportes-ordenes">
-                            <i class="fas fa-file-alt"></i> Reportes de órdenes
-                        </a>
-                    </div>
-
-                    <!-- Reportes correctivos -->
-                    <div class="nav-item">
-                        <a class="nav-link" data-module="reportes-correctivos">
-                            <i class="fas fa-wrench"></i> Correctivos
-                        </a>
-                    </div>
-
-                    <div class="nav-section-title admin-only-section">Administración</div>
-
-                    <!-- Configuración -->
-                    <div class="nav-item admin-only-nav">
-                        <a class="nav-link" data-toggle="submenu" data-target="submenu-config">
-                            <i class="fas fa-sliders-h"></i> Configuración
-                            <i class="fas fa-chevron-right nav-arrow"></i>
-                        </a>
-                        <ul id="submenu-config" class="submenu">
-                            <li class="nav-item">
-                                <a class="nav-link" data-module="config-logo">Logo empresa</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" data-module="config-tecnicos">Técnicos</a>
-                            </li>
-                            <li class="nav-item">
-                                <a class="nav-link" data-module="config-usuarios">Usuarios</a>
-                            </li>
-                        </ul>
-                    </div>
-                </nav>
-
-                <div class="sidebar-footer">
-                    <div class="user-info">
-                        <div class="user-avatar" id="user-avatar">A</div>
-                        <div class="user-details">
-                            <div class="user-name" id="user-display-name">Usuario</div>
-                            <div class="user-role" id="user-display-role">Administrador</div>
-                        </div>
-                        <button class="btn-logout" id="btn-logout" title="Cerrar sesión">
-                            <i class="fas fa-sign-out-alt"></i>
-                        </button>
-                    </div>
-                </div>
-            </aside>
-
-            <!-- Contenido principal -->
-            <div class="main-content">
-                <!-- Header -->
-                <header class="app-header">
-                    <button class="btn-hamburger" id="btn-hamburger">
-                        <i class="fas fa-bars"></i>
-                    </button>
-
-                    <div class="search-wrapper">
-                        <i class="fas fa-search search-icon"></i>
-                        <input type="text" class="search-input" id="global-search" placeholder="Buscar por código, equipo, serie, ubicación u orden...">
-                        <div class="search-results" id="search-results"></div>
-                    </div>
-
-                    <div class="header-actions">
-                        <span class="text-muted" style="font-size:0.82rem;" id="header-date"></span>
-                    </div>
-                </header>
-
-                <!-- Área de contenido dinámico -->
-                <div class="content-area">
-
-                    <!-- ====== MÓDULO: EQUIPOS - GESTIÓN ====== -->
-                    <section id="mod-equipos-gestion" class="module-section">
-                        <div class="module-header">
-                            <div>
-                                <h1 class="module-title">Gestión de Equipos</h1>
-                                <p class="module-subtitle">Administra el inventario de equipos industriales</p>
-                            </div>
-                            <div class="module-actions">
-                                <button class="btn btn-outline" id="btn-import-excel">
-                                    <i class="fas fa-file-excel"></i> <span>Importar Excel</span>
-                                </button>
-                                <button class="btn btn-primary" id="btn-add-equipo">
-                                    <i class="fas fa-plus"></i> <span>Agregar equipo</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div id="equipos-stats" class="stats-grid"></div>
-                        <div class="table-wrapper">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Código</th>
-                                        <th>Nombre</th>
-                                        <th>Marca</th>
-                                        <th>Modelo</th>
-                                        <th>Serie</th>
-                                        <th>Ubicación</th>
-                                        <th>Estado</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="equipos-tbody"></tbody>
-                            </table>
-                        </div>
-                        <div id="equipos-pagination" class="pagination"></div>
-                    </section>
-
-                    <!-- ====== MÓDULO: EQUIPOS - HISTORIAL ====== -->
-                    <section id="mod-equipos-historial" class="module-section">
-                        <div class="module-header">
-                            <div>
-                                <h1 class="module-title">Historial de Equipos</h1>
-                                <p class="module-subtitle">Consulta los mantenimientos realizados por equipo</p>
-                            </div>
-                        </div>
-                        <div class="card mb-24">
-                            <div class="card-body">
-                                <div class="form-group" style="margin-bottom:0;">
-                                    <label>Seleccionar equipo</label>
-                                    <select class="form-control" id="historial-equipo-select">
-                                        <option value="">-- Seleccione un equipo --</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="historial-list"></div>
-                    </section>
-
-                    <!-- ====== MÓDULO: ÓRDENES DE TRABAJO ====== -->
-                    <section id="mod-ordenes" class="module-section">
-                        <div class="module-header">
-                            <div>
-                                <h1 class="module-title">Órdenes de Trabajo</h1>
-                                <p class="module-subtitle">Programación de mantenimientos preventivos y correctivos</p>
-                            </div>
-                            <div class="module-actions">
-                                <button class="btn btn-primary" id="btn-add-orden">
-                                    <i class="fas fa-plus"></i> <span>Nueva orden</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div id="ordenes-stats" class="stats-grid"></div>
-                        <div class="table-wrapper">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>No.</th>
-                                        <th>Equipo</th>
-                                        <th>Tipo</th>
-                                        <th>Actividades</th>
-                                        <th>Estado</th>
-                                        <th>Fecha creación</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="ordenes-tbody"></tbody>
-                            </table>
-                        </div>
-                        <div id="ordenes-pagination" class="pagination"></div>
-                    </section>
-
-                    <!-- ====== MÓDULO: REPORTES DE ÓRDENES ====== -->
-                    <section id="mod-reportes-ordenes" class="module-section">
-                        <div class="module-header">
-                            <div>
-                                <h1 class="module-title">Reportes de Órdenes</h1>
-                                <p class="module-subtitle">Diligencia reportes de las órdenes de trabajo asignadas</p>
-                            </div>
-                        </div>
-
-                        <!-- Lista de órdenes pendientes -->
-                        <div id="reportes-ordenes-list"></div>
-
-                        <!-- Formulario de reporte (oculto hasta seleccionar orden) -->
-                        <div id="reporte-orden-form-container" class="hidden">
-                            <div class="report-form-card">
-                                <h3 id="reporte-orden-title">Reporte de Orden No. 0001</h3>
-                                <form id="reporte-orden-form">
-                                    <input type="hidden" id="ro-orden-id">
-                                    <input type="hidden" id="ro-equipo-id">
-                                    <input type="hidden" id="ro-consecutivo">
-                                    <input type="hidden" id="ro-tipo">
-                                    <input type="hidden" id="ro-equipo-nombre">
-                                    <input type="hidden" id="ro-equipo-codigo">
-
-                                    <div class="form-row-3 mb-16">
-                                        <div class="form-group" style="margin-bottom:0;">
-                                            <label>Fecha</label>
-                                            <input type="date" class="form-control" id="ro-fecha" required>
-                                        </div>
-                                        <div class="form-group" style="margin-bottom:0;">
-                                            <label>Hora inicio</label>
-                                            <input type="time" class="form-control" id="ro-hora-inicio" required>
-                                        </div>
-                                        <div class="form-group" style="margin-bottom:0;">
-                                            <label>Hora final</label>
-                                            <input type="time" class="form-control" id="ro-hora-final" required>
-                                        </div>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Técnico</label>
-                                        <select class="form-control" id="ro-tecnico" required>
-                                            <option value="">-- Seleccione técnico --</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Repuestos utilizados</label>
-                                        <textarea class="form-control" id="ro-repuestos" rows="3" placeholder="Describa los repuestos utilizados..."></textarea>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Actividades realizadas</label>
-                                        <textarea class="form-control" id="ro-actividades" rows="4" placeholder="Describa las actividades realizadas..." required></textarea>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Observaciones</label>
-                                        <textarea class="form-control" id="ro-observaciones" rows="3" placeholder="Observaciones adicionales..."></textarea>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Evidencia fotográfica (máx. 4 fotos)</label>
-                                        <div class="photo-upload-area" id="ro-photo-upload">
-                                            <i class="fas fa-camera"></i>
-                                            <p>Haz clic o arrastra fotos aquí</p>
-                                        </div>
-                                        <input type="file" id="ro-photo-input" accept="image/*" multiple class="hidden">
-                                        <div class="photo-grid" id="ro-photo-grid"></div>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Firma del técnico</label>
-                                        <canvas class="signature-canvas" id="ro-firma-canvas"></canvas>
-                                        <div class="signature-actions">
-                                            <button type="button" class="btn btn-outline btn-sm" id="ro-limpiar-firma">
-                                                <i class="fas fa-eraser"></i> Limpiar
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px;">
-                                        <button type="submit" class="btn btn-primary btn-lg">
-                                            <i class="fas fa-save"></i> Guardar reporte
-                                        </button>
-                                        <button type="button" class="btn btn-accent btn-lg" id="ro-generar-pdf" disabled>
-                                            <i class="fas fa-file-pdf"></i> Generar PDF
-                                        </button>
-                                        <button type="button" class="btn btn-outline btn-lg" id="ro-volver-lista">
-                                            <i class="fas fa-arrow-left"></i> Volver a la lista
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- ====== MÓDULO: REPORTES CORRECTIVOS ====== -->
-                    <section id="mod-reportes-correctivos" class="module-section">
-                        <div class="module-header">
-                            <div>
-                                <h1 class="module-title">Reportes Correctivos</h1>
-                                <p class="module-subtitle">Registro de mantenimientos correctivos realizados</p>
-                            </div>
-                        </div>
-
-                        <!-- Lista de reportes correctivos previos -->
-                        <div id="correctivos-list"></div>
-
-                        <!-- Formulario de nuevo correctivo -->
-                        <div id="correctivo-form-container">
-                            <div class="report-form-card">
-                                <h3>Nuevo Reporte Correctivo</h3>
-                                <form id="correctivo-form">
-                                    <div class="form-group">
-                                        <label>Equipo</label>
-                                        <select class="form-control" id="rc-equipo" required>
-                                            <option value="">-- Seleccione un equipo --</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="form-row-3 mb-16">
-                                        <div class="form-group" style="margin-bottom:0;">
-                                            <label>Fecha</label>
-                                            <input type="date" class="form-control" id="rc-fecha" required>
-                                        </div>
-                                        <div class="form-group" style="margin-bottom:0;">
-                                            <label>Hora inicio</label>
-                                            <input type="time" class="form-control" id="rc-hora-inicio" required>
-                                        </div>
-                                        <div class="form-group" style="margin-bottom:0;">
-                                            <label>Hora final</label>
-                                            <input type="time" class="form-control" id="rc-hora-final" required>
-                                        </div>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Técnico</label>
-                                        <select class="form-control" id="rc-tecnico" required>
-                                            <option value="">-- Seleccione técnico --</option>
-                                        </select>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Repuestos utilizados</label>
-                                        <textarea class="form-control" id="rc-repuestos" rows="3" placeholder="Describa los repuestos utilizados..."></textarea>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Actividades realizadas</label>
-                                        <textarea class="form-control" id="rc-actividades" rows="4" placeholder="Describa las actividades realizadas..." required></textarea>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Observaciones</label>
-                                        <textarea class="form-control" id="rc-observaciones" rows="3" placeholder="Observaciones adicionales..."></textarea>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Evidencia fotográfica (máx. 4 fotos)</label>
-                                        <div class="photo-upload-area" id="rc-photo-upload">
-                                            <i class="fas fa-camera"></i>
-                                            <p>Haz clic o arrastra fotos aquí</p>
-                                        </div>
-                                        <input type="file" id="rc-photo-input" accept="image/*" multiple class="hidden">
-                                        <div class="photo-grid" id="rc-photo-grid"></div>
-                                    </div>
-
-                                    <div class="form-group">
-                                        <label>Firma del técnico</label>
-                                        <canvas class="signature-canvas" id="rc-firma-canvas"></canvas>
-                                        <div class="signature-actions">
-                                            <button type="button" class="btn btn-outline btn-sm" id="rc-limpiar-firma">
-                                                <i class="fas fa-eraser"></i> Limpiar
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:24px;">
-                                        <button type="submit" class="btn btn-primary btn-lg">
-                                            <i class="fas fa-save"></i> Guardar reporte
-                                        </button>
-                                        <button type="button" class="btn btn-accent btn-lg" id="rc-generar-pdf" disabled>
-                                            <i class="fas fa-file-pdf"></i> Generar PDF
-                                        </button>
-                                    </div>
-                                </form>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- ====== MÓDULO: CONFIGURACIÓN - LOGO ====== -->
-                    <section id="mod-config-logo" class="module-section">
-                        <div class="module-header">
-                            <div>
-                                <h1 class="module-title">Logo de la Empresa</h1>
-                                <p class="module-subtitle">El logo se incluirá en los reportes PDF generados</p>
-                            </div>
-                        </div>
-                        <div class="card">
-                            <div class="card-body">
-                                <div class="logo-preview" id="logo-preview">
-                                    <span class="text-muted" style="font-size:0.85rem;">Sin logo cargado</span>
-                                </div>
-                                <input type="file" id="logo-input" accept="image/*" class="hidden">
-                                <div style="display:flex;gap:10px;">
-                                    <button class="btn btn-primary" id="btn-upload-logo">
-                                        <i class="fas fa-upload"></i> Cargar logo
-                                    </button>
-                                    <button class="btn btn-danger hidden" id="btn-remove-logo">
-                                        <i class="fas fa-trash"></i> Eliminar logo
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
-
-                    <!-- ====== MÓDULO: CONFIGURACIÓN - TÉCNICOS ====== -->
-                    <section id="mod-config-tecnicos" class="module-section">
-                        <div class="module-header">
-                            <div>
-                                <h1 class="module-title">Técnicos</h1>
-                                <p class="module-subtitle">Administra los técnicos disponibles para los reportes</p>
-                            </div>
-                            <div class="module-actions">
-                                <button class="btn btn-primary" id="btn-add-tecnico">
-                                    <i class="fas fa-plus"></i> <span>Agregar técnico</span>
-                                </button>
-                            </div>
-                        </div>
-                        <div id="tecnicos-list"></div>
-                    </section>
-
-                    <!-- ====== MÓDULO: CONFIGURACIÓN - USUARIOS ====== -->
-                    <section id="mod-config-usuarios" class="module-section">
-                        <div class="module-header">
-                            <div>
-                                <h1 class="module-title">Usuarios del Sistema</h1>
-                                <p class="module-subtitle">Gestiona los roles de acceso de los usuarios</p>
-                            </div>
-                        </div>
-                        <div class="table-wrapper">
-                            <table class="data-table">
-                                <thead>
-                                    <tr>
-                                        <th>Nombre</th>
-                                        <th>Correo</th>
-                                        <th>Rol</th>
-                                        <th>Acciones</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="usuarios-tbody"></tbody>
-                            </table>
-                        </div>
-                    </section>
-
-                </div><!-- /content-area -->
-            </div><!-- /main-content -->
-        </div><!-- /app-layout -->
-    </div><!-- /app-screen -->
-
-    <!-- ============================================
-         MODAL GENÉRICO
-         ============================================ -->
-    <div id="modal-overlay" class="modal-overlay">
-        <div id="modal-container" class="modal-container">
-            <div class="modal-header">
-                <h3 id="modal-title">Título</h3>
-                <button class="modal-close" id="modal-close">&times;</button>
-            </div>
-            <div id="modal-body" class="modal-body"></div>
-            <div id="modal-footer" class="modal-footer hidden"></div>
+      <div class="field">
+        <label for="login-password">Contraseña</label>
+        <div class="field-password">
+          <input type="password" id="login-password" name="password" autocomplete="current-password" required placeholder="••••••••">
+          <button type="button" class="icon-btn" id="toggle-password" aria-label="Mostrar contraseña">
+            <i data-lucide="eye"></i>
+          </button>
         </div>
+      </div>
+
+      <p id="login-error" class="form-error" role="alert" hidden></p>
+
+      <button type="submit" class="btn btn-primary btn-block" id="login-submit">
+        <span class="btn-label">Ingresar</span>
+        <span class="btn-spinner" hidden></span>
+      </button>
+    </form>
+
+    <p class="auth-footnote">Acceso restringido a personal autorizado de LleSer Ltda.</p>
+  </div>
+</main>
+
+<!-- ============================================================
+     APLICACIÓN PRINCIPAL (visible tras autenticación)
+     ============================================================ -->
+<div id="app" class="app-shell" hidden>
+
+  <!-- ---------- SIDEBAR ---------- -->
+  <aside id="sidebar" class="sidebar">
+    <div class="sidebar-header">
+      <span class="logo-mark"><span class="logo-lle">Lle</span><span class="logo-ser">Ser</span></span>
+      <button id="sidebar-close" class="icon-btn sidebar-close" aria-label="Cerrar menú">
+        <i data-lucide="x"></i>
+      </button>
     </div>
 
-    <!-- Toast container -->
-    <div id="toast-container" class="toast-container"></div>
-    <script src="https://cdn.jsdelivr.net/npm/eruda@3.0.1/eruda.min.js"></script>
-    <script>eruda.init();</script>
-    
-    <!-- Lógica principal -->
-    <script src="script.js"></script>
+    <nav class="sidebar-nav" aria-label="Navegación principal">
+      <ul>
+        <li>
+          <button class="nav-item is-active" data-module="dashboard">
+            <i data-lucide="layout-dashboard"></i>
+            <span>Inicio</span>
+          </button>
+        </li>
+        <li data-role-visibility="admin">
+          <button class="nav-item" data-module="equipos">
+            <i data-lucide="wrench"></i>
+            <span>Equipos</span>
+          </button>
+        </li>
+        <li data-role-visibility="admin">
+          <button class="nav-item" data-module="ordenes">
+            <i data-lucide="clipboard-list"></i>
+            <span>Órdenes de trabajo</span>
+          </button>
+        </li>
+        <li data-role-visibility="admin,tecnico">
+          <button class="nav-item" data-module="reportes-ot">
+            <i data-lucide="file-check-2"></i>
+            <span>Reportes de OT</span>
+          </button>
+        </li>
+        <li data-role-visibility="admin,tecnico">
+          <button class="nav-item" data-module="reportes-correctivos">
+            <i data-lucide="hammer"></i>
+            <span>Mantenimiento correctivo</span>
+          </button>
+        </li>
+        <li data-role-visibility="admin">
+          <button class="nav-item" data-module="configuracion">
+            <i data-lucide="settings"></i>
+            <span>Configuración</span>
+          </button>
+        </li>
+      </ul>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="sidebar-user">
+        <span class="avatar" id="sidebar-user-avatar">--</span>
+        <div class="sidebar-user-info">
+          <strong id="sidebar-user-name">—</strong>
+          <span id="sidebar-user-role">—</span>
+        </div>
+      </div>
+      <button id="logout-btn" class="icon-btn" aria-label="Cerrar sesión">
+        <i data-lucide="log-out"></i>
+      </button>
+    </div>
+  </aside>
+
+  <div id="sidebar-overlay" class="sidebar-overlay" hidden></div>
+
+  <!-- ---------- CONTENEDOR PRINCIPAL ---------- -->
+  <div class="main-container">
+
+    <!-- ---------- TOPBAR ---------- -->
+    <header class="topbar">
+      <button id="hamburger-btn" class="icon-btn hamburger" aria-label="Abrir menú" aria-controls="sidebar" aria-expanded="false">
+        <i data-lucide="menu"></i>
+      </button>
+
+      <h1 id="topbar-title" class="topbar-title">Inicio</h1>
+
+      <div class="topbar-search">
+        <i data-lucide="search" class="search-icon"></i>
+        <input type="search" id="global-search" placeholder="Buscar por código, equipo, serie, ubicación u OT…" aria-label="Buscador general">
+        <div id="global-search-results" class="search-results" hidden></div>
+      </div>
+
+      <div class="topbar-actions">
+        <span class="badge-plate" id="topbar-role-badge">—</span>
+      </div>
+    </header>
+
+    <!-- ---------- CONTENIDO / MÓDULOS ---------- -->
+    <div class="content" id="content">
+
+      <!-- ============ INICIO ============ -->
+      <section class="module-view is-active" id="module-dashboard" data-module="dashboard">
+        <div class="module-header">
+          <h2>Panel general</h2>
+          <p class="module-subtitle">Resumen de actividad de mantenimiento</p>
+        </div>
+        <div class="stat-grid" id="dashboard-stats">
+          <div class="stat-card">
+            <i data-lucide="wrench"></i>
+            <div><strong id="stat-equipos">0</strong><span>Equipos registrados</span></div>
+          </div>
+          <div class="stat-card">
+            <i data-lucide="clipboard-list"></i>
+            <div><strong id="stat-ordenes-abiertas">0</strong><span>Órdenes abiertas</span></div>
+          </div>
+          <div class="stat-card">
+            <i data-lucide="file-check-2"></i>
+            <div><strong id="stat-reportes-mes">0</strong><span>Reportes este mes</span></div>
+          </div>
+          <div class="stat-card">
+            <i data-lucide="hammer"></i>
+            <div><strong id="stat-correctivos-mes">0</strong><span>Correctivos este mes</span></div>
+          </div>
+        </div>
+        <div class="panel" id="dashboard-recent">
+          <h3>Actividad reciente</h3>
+          <ul class="timeline" id="dashboard-timeline"></ul>
+        </div>
+      </section>
+
+      <!-- ============ MÓDULO 1: EQUIPOS ============ -->
+      <section class="module-view" id="module-equipos" data-module="equipos">
+        <div class="module-header">
+          <h2>Equipos</h2>
+          <p class="module-subtitle">Inventario y hoja de vida de los equipos industriales</p>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Pestañas de equipos">
+          <button class="tab is-active" role="tab" aria-selected="true" data-tab="equipos-gestion">Gestión de equipos</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="equipos-historial">Historial</button>
+        </div>
+
+        <!-- Sub-pestaña: Gestión de equipos -->
+        <div class="tab-panel is-active" id="tab-equipos-gestion" role="tabpanel">
+          <div class="toolbar">
+            <div class="toolbar-search">
+              <i data-lucide="search"></i>
+              <input type="search" id="equipos-search" placeholder="Buscar equipo por código, nombre, serie o ubicación…">
+            </div>
+            <div class="toolbar-actions">
+              <button class="btn btn-secondary" id="btn-import-equipos">
+                <i data-lucide="upload"></i> Importar Excel
+              </button>
+              <input type="file" id="import-equipos-file" accept=".xlsx,.xls,.csv" hidden>
+              <button class="btn btn-primary" id="btn-add-equipo">
+                <i data-lucide="plus"></i> Agregar equipo
+              </button>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="data-table" id="equipos-table">
+              <thead>
+                <tr>
+                  <th>Código</th>
+                  <th>Nombre</th>
+                  <th>Marca</th>
+                  <th>Modelo</th>
+                  <th>Serie</th>
+                  <th>Ubicación</th>
+                  <th>Estado</th>
+                  <th class="col-actions">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="equipos-tbody">
+                <!-- Filas generadas dinámicamente por script.js -->
+              </tbody>
+            </table>
+            <div class="table-empty" id="equipos-empty" hidden>
+              <i data-lucide="package-open"></i>
+              <p>No hay equipos registrados todavía.</p>
+            </div>
+          </div>
+
+          <div class="pagination" id="equipos-pagination"></div>
+        </div>
+
+        <!-- Sub-pestaña: Historial -->
+        <div class="tab-panel" id="tab-equipos-historial" role="tabpanel" hidden>
+          <div class="field field-inline">
+            <label for="historial-equipo-select">Selecciona un equipo</label>
+            <select id="historial-equipo-select">
+              <option value="">— Selecciona un equipo —</option>
+            </select>
+          </div>
+
+          <div id="historial-equipo-info" class="plate-info" hidden></div>
+
+          <ul class="timeline" id="historial-timeline"></ul>
+          <div class="table-empty" id="historial-empty">
+            <i data-lucide="history"></i>
+            <p>Selecciona un equipo para ver su historial de mantenimientos.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ MÓDULO 2: ÓRDENES DE TRABAJO ============ -->
+      <section class="module-view" id="module-ordenes" data-module="ordenes">
+        <div class="module-header">
+          <h2>Órdenes de trabajo</h2>
+          <p class="module-subtitle">Programación de mantenimientos preventivos y correctivos</p>
+        </div>
+
+        <div class="toolbar">
+          <div class="toolbar-search">
+            <i data-lucide="search"></i>
+            <input type="search" id="ordenes-search" placeholder="Buscar por número de OT, equipo o tipo…">
+          </div>
+          <div class="toolbar-actions">
+            <select id="ordenes-filter-tipo" class="select-filter">
+              <option value="">Todos los tipos</option>
+              <option value="preventivo">Preventivo</option>
+              <option value="correctivo">Correctivo</option>
+              <option value="diagnostico">Diagnóstico</option>
+              <option value="instalacion">Instalación</option>
+            </select>
+            <button class="btn btn-primary" id="btn-add-orden">
+              <i data-lucide="plus"></i> Nueva orden
+            </button>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="data-table" id="ordenes-table">
+            <thead>
+              <tr>
+                <th>N.º OT</th>
+                <th>Equipo</th>
+                <th>Tipo</th>
+                <th>Actividades</th>
+                <th>Estado</th>
+                <th class="col-actions">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="ordenes-tbody"></tbody>
+          </table>
+          <div class="table-empty" id="ordenes-empty" hidden>
+            <i data-lucide="clipboard-x"></i>
+            <p>No hay órdenes de trabajo creadas todavía.</p>
+          </div>
+        </div>
+
+        <div class="pagination" id="ordenes-pagination"></div>
+      </section>
+
+      <!-- ============ MÓDULO 3: REPORTES DE ÓRDENES ASIGNADAS ============ -->
+      <section class="module-view" id="module-reportes-ot" data-module="reportes-ot">
+        <div class="module-header">
+          <h2>Reportes de órdenes asignadas</h2>
+          <p class="module-subtitle">Diligencia el reporte de ejecución de cada orden de trabajo</p>
+        </div>
+
+        <div class="toolbar">
+          <div class="toolbar-search">
+            <i data-lucide="search"></i>
+            <input type="search" id="reportes-ot-search" placeholder="Buscar orden asignada…">
+          </div>
+        </div>
+
+        <div class="card-grid" id="reportes-ot-grid">
+          <!-- Tarjetas de OT pendientes/realizadas generadas por script.js -->
+        </div>
+        <div class="table-empty" id="reportes-ot-empty" hidden>
+          <i data-lucide="clipboard-check"></i>
+          <p>No tienes órdenes de trabajo asignadas por reportar.</p>
+        </div>
+      </section>
+
+      <!-- ============ MÓDULO 4: REPORTES DE MANTENIMIENTO CORRECTIVO ============ -->
+      <section class="module-view" id="module-reportes-correctivos" data-module="reportes-correctivos">
+        <div class="module-header">
+          <h2>Mantenimiento correctivo</h2>
+          <p class="module-subtitle">Registro independiente de intervenciones correctivas</p>
+        </div>
+
+        <div class="toolbar">
+          <div class="toolbar-search">
+            <i data-lucide="search"></i>
+            <input type="search" id="correctivos-search" placeholder="Buscar reporte correctivo por consecutivo o equipo…">
+          </div>
+          <div class="toolbar-actions">
+            <button class="btn btn-primary" id="btn-add-correctivo">
+              <i data-lucide="plus"></i> Nuevo reporte correctivo
+            </button>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="data-table" id="correctivos-table">
+            <thead>
+              <tr>
+                <th>Consecutivo</th>
+                <th>Equipo</th>
+                <th>Fecha</th>
+                <th>Técnico</th>
+                <th class="col-actions">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="correctivos-tbody"></tbody>
+          </table>
+          <div class="table-empty" id="correctivos-empty" hidden>
+            <i data-lucide="hammer"></i>
+            <p>No hay reportes correctivos registrados todavía.</p>
+          </div>
+        </div>
+
+        <div class="pagination" id="correctivos-pagination"></div>
+      </section>
+
+      <!-- ============ MÓDULO 5: CONFIGURACIÓN ============ -->
+      <section class="module-view" id="module-configuracion" data-module="configuracion">
+        <div class="module-header">
+          <h2>Configuración</h2>
+          <p class="module-subtitle">Identidad de la empresa y administración de técnicos</p>
+        </div>
+
+        <div class="tabs" role="tablist" aria-label="Pestañas de configuración">
+          <button class="tab is-active" role="tab" aria-selected="true" data-tab="config-logo">Logo de la empresa</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="config-tecnicos">Técnicos</button>
+        </div>
+
+        <!-- Sub-pestaña: Logo -->
+        <div class="tab-panel is-active" id="tab-config-logo" role="tabpanel">
+          <div class="panel logo-uploader">
+            <div class="logo-preview" id="logo-preview">
+              <i data-lucide="image"></i>
+              <span>Sin logo cargado</span>
+            </div>
+            <div class="logo-uploader-controls">
+              <p>Este logotipo se usará automáticamente en el encabezado de los reportes PDF.</p>
+              <input type="file" id="logo-file-input" accept="image/png,image/jpeg,image/svg+xml" hidden>
+              <button class="btn btn-secondary" id="btn-upload-logo">
+                <i data-lucide="upload"></i> Cargar logo
+              </button>
+              <button class="btn btn-ghost" id="btn-remove-logo">
+                <i data-lucide="trash-2"></i> Quitar logo
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sub-pestaña: Técnicos -->
+        <div class="tab-panel" id="tab-config-tecnicos" role="tabpanel" hidden>
+          <div class="toolbar">
+            <div class="toolbar-search">
+              <i data-lucide="search"></i>
+              <input type="search" id="tecnicos-search" placeholder="Buscar técnico por nombre o cargo…">
+            </div>
+            <div class="toolbar-actions">
+              <button class="btn btn-primary" id="btn-add-tecnico">
+                <i data-lucide="plus"></i> Agregar técnico
+              </button>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="data-table" id="tecnicos-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Cargo</th>
+                  <th>Firma</th>
+                  <th class="col-actions">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tecnicos-tbody"></tbody>
+            </table>
+            <div class="table-empty" id="tecnicos-empty" hidden>
+              <i data-lucide="users"></i>
+              <p>No hay técnicos registrados todavía.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /.content -->
+  </div><!-- /.main-container -->
+</div><!-- /#app -->
+
+<!-- ============================================================
+     MODALES (contenido inyectado/mostrado dinámicamente por script.js)
+     ============================================================ -->
+
+<!-- Modal genérico: Equipo -->
+<div class="modal-overlay" id="modal-equipo" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-equipo-title">
+    <header class="modal-header">
+      <h3 id="modal-equipo-title">Agregar equipo</h3>
+      <button class="icon-btn" data-close-modal="modal-equipo" aria-label="Cerrar"><i data-lucide="x"></i></button>
+    </header>
+    <form id="form-equipo" class="modal-body" novalidate>
+      <input type="hidden" id="equipo-doc-id">
+      <div class="field-grid">
+        <div class="field">
+          <label for="equipo-codigo">Código *</label>
+          <input type="text" id="equipo-codigo" name="codigo" required placeholder="EQ-001">
+        </div>
+        <div class="field">
+          <label for="equipo-nombre">Nombre *</label>
+          <input type="text" id="equipo-nombre" name="nombre" required placeholder="Compresor de tornillo">
+        </div>
+        <div class="field">
+          <label for="equipo-marca">Marca</label>
+          <input type="text" id="equipo-marca" name="marca" placeholder="Ingersoll Rand">
+        </div>
+        <div class="field">
+          <label for="equipo-modelo">Modelo</label>
+          <input type="text" id="equipo-modelo" name="modelo" placeholder="R-Series">
+        </div>
+        <div class="field">
+          <label for="equipo-serie">Serie</label>
+          <input type="text" id="equipo-serie" name="serie" placeholder="SN-00123">
+        </div>
+        <div class="field">
+          <label for="equipo-ubicacion">Ubicación</label>
+          <input type="text" id="equipo-ubicacion" name="ubicacion" placeholder="Planta 2 - Sala de máquinas">
+        </div>
+        <div class="field">
+          <label for="equipo-estado">Estado</label>
+          <select id="equipo-estado" name="estado">
+            <option value="operativo">Operativo</option>
+            <option value="en-mantenimiento">En mantenimiento</option>
+            <option value="fuera-servicio">Fuera de servicio</option>
+          </select>
+        </div>
+      </div>
+    </form>
+    <footer class="modal-footer">
+      <button class="btn btn-ghost" data-close-modal="modal-equipo">Cancelar</button>
+      <button class="btn btn-primary" type="submit" form="form-equipo">
+        <i data-lucide="save"></i> Guardar equipo
+      </button>
+    </footer>
+  </div>
+</div>
+
+<!-- Modal: Importar equipos desde Excel -->
+<div class="modal-overlay" id="modal-import-equipos" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-import-title">
+    <header class="modal-header">
+      <h3 id="modal-import-title">Importar equipos desde Excel</h3>
+      <button class="icon-btn" data-close-modal="modal-import-equipos" aria-label="Cerrar"><i data-lucide="x"></i></button>
+    </header>
+    <div class="modal-body">
+      <p class="hint-text">El archivo debe contener las columnas: Código, Nombre, Marca, Modelo, Serie, Ubicación, Estado.</p>
+      <div id="import-preview-wrapper" class="table-wrapper" hidden>
+        <table class="data-table" id="import-preview-table"></table>
+      </div>
+      <div id="import-summary" class="import-summary" hidden></div>
+    </div>
+    <footer class="modal-footer">
+      <button class="btn btn-ghost" data-close-modal="modal-import-equipos">Cancelar</button>
+      <button class="btn btn-primary" id="btn-confirm-import">
+        <i data-lucide="upload"></i> Confirmar importación
+      </button>
+    </footer>
+  </div>
+</div>
+
+<!-- Modal: Orden de trabajo -->
+<div class="modal-overlay" id="modal-orden" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-orden-title">
+    <header class="modal-header">
+      <h3 id="modal-orden-title">Nueva orden de trabajo</h3>
+      <button class="icon-btn" data-close-modal="modal-orden" aria-label="Cerrar"><i data-lucide="x"></i></button>
+    </header>
+    <form id="form-orden" class="modal-body" novalidate>
+      <input type="hidden" id="orden-doc-id">
+      <div class="field">
+        <label for="orden-numero-preview">N.º de orden</label>
+        <span class="badge-plate" id="orden-numero-preview">Se asigna al guardar</span>
+      </div>
+      <div class="field">
+        <label for="orden-equipo">Equipo *</label>
+        <select id="orden-equipo" name="equipoId" required>
+          <option value="">— Selecciona un equipo —</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="orden-tipo">Tipo de orden *</label>
+        <select id="orden-tipo" name="tipo" required>
+          <option value="preventivo">Preventivo</option>
+          <option value="correctivo">Correctivo</option>
+          <option value="diagnostico">Diagnóstico</option>
+          <option value="instalacion">Instalación</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="orden-actividades">Actividades a realizar *</label>
+        <textarea id="orden-actividades" name="actividades" rows="4" required placeholder="Describe las actividades a ejecutar…"></textarea>
+      </div>
+    </form>
+    <footer class="modal-footer">
+      <button class="btn btn-ghost" data-close-modal="modal-orden">Cancelar</button>
+      <button class="btn btn-primary" type="submit" form="form-orden">
+        <i data-lucide="save"></i> Guardar orden
+      </button>
+    </footer>
+  </div>
+</div>
+
+<!-- Modal: Formulario de reporte (OT asignada y correctivo comparten estructura) -->
+<div class="modal-overlay" id="modal-reporte" hidden>
+  <div class="modal modal-lg" role="dialog" aria-modal="true" aria-labelledby="modal-reporte-title">
+    <header class="modal-header">
+      <h3 id="modal-reporte-title">Diligenciar reporte</h3>
+      <button class="icon-btn" data-close-modal="modal-reporte" aria-label="Cerrar"><i data-lucide="x"></i></button>
+    </header>
+    <form id="form-reporte" class="modal-body" novalidate>
+      <input type="hidden" id="reporte-doc-id">
+      <input type="hidden" id="reporte-tipo-origen">
+      <input type="hidden" id="reporte-orden-id">
+
+      <div class="plate-info" id="reporte-equipo-info"></div>
+
+      <div class="field-grid">
+        <div class="field">
+          <label for="reporte-equipo-select">Equipo *</label>
+          <select id="reporte-equipo-select" name="equipoId" required>
+            <option value="">— Selecciona un equipo —</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="reporte-fecha">Fecha *</label>
+          <input type="date" id="reporte-fecha" name="fecha" required>
+        </div>
+        <div class="field">
+          <label for="reporte-hora-inicio">Hora de inicio *</label>
+          <input type="time" id="reporte-hora-inicio" name="horaInicio" required>
+        </div>
+        <div class="field">
+          <label for="reporte-hora-final">Hora final *</label>
+          <input type="time" id="reporte-hora-final" name="horaFinal" required>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="reporte-repuestos">Repuestos utilizados</label>
+        <textarea id="reporte-repuestos" name="repuestos" rows="3" placeholder="Lista de repuestos, cantidades y referencias…"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="reporte-actividades">Actividades realizadas *</label>
+        <textarea id="reporte-actividades" name="actividadesRealizadas" rows="3" required placeholder="Detalle de las actividades ejecutadas…"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="reporte-observaciones">Observaciones</label>
+        <textarea id="reporte-observaciones" name="observaciones" rows="3" placeholder="Observaciones adicionales, recomendaciones, pendientes…"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="reporte-evidencia">Evidencia fotográfica</label>
+        <input type="file" id="reporte-evidencia" name="evidencia" accept="image/*" multiple>
+        <div class="evidence-preview" id="reporte-evidencia-preview"></div>
+      </div>
+    </form>
+    <footer class="modal-footer">
+      <button class="btn btn-ghost" data-close-modal="modal-reporte">Cancelar</button>
+      <button class="btn btn-secondary" id="btn-save-reporte-draft">
+        <i data-lucide="save"></i> Guardar
+      </button>
+      <button class="btn btn-primary" id="btn-generate-pdf" type="submit" form="form-reporte">
+        <i data-lucide="file-down"></i> Generar PDF
+      </button>
+    </footer>
+  </div>
+</div>
+
+<!-- Modal: Técnico (incluye firma) -->
+<div class="modal-overlay" id="modal-tecnico" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-tecnico-title">
+    <header class="modal-header">
+      <h3 id="modal-tecnico-title">Agregar técnico</h3>
+      <button class="icon-btn" data-close-modal="modal-tecnico" aria-label="Cerrar"><i data-lucide="x"></i></button>
+    </header>
+    <form id="form-tecnico" class="modal-body" novalidate>
+      <input type="hidden" id="tecnico-doc-id">
+      <div class="field">
+        <label for="tecnico-nombre">Nombre *</label>
+        <input type="text" id="tecnico-nombre" name="nombre" required placeholder="Nombre completo">
+      </div>
+      <div class="field">
+        <label for="tecnico-cargo">Cargo *</label>
+        <input type="text" id="tecnico-cargo" name="cargo" required placeholder="Técnico de mantenimiento">
+      </div>
+      <div class="field">
+        <label>Firma *</label>
+        <div class="signature-pad-wrapper">
+          <canvas id="tecnico-firma-canvas" width="480" height="180"></canvas>
+          <button type="button" class="btn btn-ghost btn-sm" id="btn-clear-firma">
+            <i data-lucide="eraser"></i> Limpiar
+          </button>
+        </div>
+      </div>
+    </form>
+    <footer class="modal-footer">
+      <button class="btn btn-ghost" data-close-modal="modal-tecnico">Cancelar</button>
+      <button class="btn btn-primary" type="submit" form="form-tecnico">
+        <i data-lucide="save"></i> Guardar técnico
+      </button>
+    </footer>
+  </div>
+</div>
+
+<!-- Modal de confirmación genérico (eliminar equipo/orden/técnico, etc.) -->
+<div class="modal-overlay" id="modal-confirm" hidden>
+  <div class="modal modal-sm" role="alertdialog" aria-modal="true" aria-labelledby="modal-confirm-title">
+    <header class="modal-header">
+      <h3 id="modal-confirm-title">¿Confirmar acción?</h3>
+    </header>
+    <div class="modal-body">
+      <p id="modal-confirm-message">Esta acción no se puede deshacer.</p>
+    </div>
+    <footer class="modal-footer">
+      <button class="btn btn-ghost" data-close-modal="modal-confirm">Cancelar</button>
+      <button class="btn btn-danger" id="btn-confirm-action">Eliminar</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ============================================================
+     TOASTS / NOTIFICACIONES
+     ============================================================ -->
+<div id="toast-container" class="toast-container" aria-live="assertive"></div>
+
+<!-- ============================================================
+     SCRIPTS DE LA APLICACIÓN (módulos ES)
+     ============================================================ -->
+<script type="module" src="config.js"></script>
+<script type="module" src="script.js"></script>
+
 </body>
 </html>

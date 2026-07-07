@@ -1,824 +1,740 @@
-/* ============================================================
-   script.js — LleSer Ltda.
-   Lógica de la aplicación (SPA sin framework, ES Modules nativos).
+/* ============================================================================
+   LleSer Ltda. — Sistema de gestión de mantenimientos
+   script.js  (Parte 1 de varias)
+   ----------------------------------------------------------------------------
+   Contenido de esta parte:
+     0. Imports y helpers genéricos (DOM, toasts, modales, tabs)
+     1. Sidebar / topbar / navegación entre módulos
+     2. Autenticación (login, logout, estado de sesión, roles)
+     3. Módulo de Configuración:
+          3.1 Logo de la empresa
+          3.2 Técnicos (con firma en canvas)
+          3.3 Usuarios (crear cuentas y asignar rol)
 
-   ------------------------------------------------------------
-   ESTADO DE CONSTRUCCIÓN — PARTE 2 de N
-   ------------------------------------------------------------
-   Este archivo se está construyendo por partes.
-
-     ✅ Parte 1 — Utilidades compartidas (toasts, modales, validaciones)
-                  + Módulo Configuración (logo y técnicos con firma)
-     ✅ Parte 2 — Autenticación (login/logout, roles) y
-                  Router de módulos (sidebar, hamburguesa, hash)
-
-   Pendiente para próximas partes:
-     ⏳ Módulo Equipos (CRUD, historial, importar Excel)
-     ⏳ Módulo Órdenes de trabajo
-     ⏳ Módulo Reportes de OT asignadas (+ generación PDF)
-     ⏳ Módulo Reportes de mantenimiento correctivo (+ PDF)
-     ⏳ Buscador global
-     ⏳ Paginación / lazy loading genérico
-
-   REQUISITO EN FIRESTORE (para que el login funcione):
-   Debe existir una colección "usuarios" con un documento por cada
-   persona que inicia sesión, donde el ID DEL DOCUMENTO es el UID
-   que Firebase Authentication le asigna a ese usuario, y contiene:
-     { nombre: "Juan Pérez", rol: "administrador" | "tecnico" }
-   El usuario y su contraseña se crean en Firebase Authentication
-   (Email/Password); el documento en "usuarios" define su nombre
-   visible y su rol dentro de la app.
-   ============================================================ */
+   Lo que falta para partes siguientes: Equipos, Órdenes de trabajo,
+   Reportes de OT, Reportes correctivos, generación de PDF, importación
+   de Excel, buscador global y paginación de tablas grandes.
+   ============================================================================ */
 
 import {
-  auth, db, storage,
-  collection, doc, setDoc, updateDoc, deleteDoc, getDoc,
-  onSnapshot, query, orderBy, serverTimestamp,
-  storageRef, uploadBytes, getDownloadURL, deleteObject,
-  signInWithEmailAndPassword, signOut, onAuthStateChanged,
-  COLLECTIONS, APP_CONFIG, ROLES
+  auth,
+  db,
+  storage,
+  COLLECTIONS,
+  ROLES,
+  onAuthChange,
+  login,
+  logout,
+  getUserProfile,
+  createUserWithRole,
 } from "./config.js";
 
-/* ============================================================
-   UTILIDADES COMPARTIDAS
-   (se usarán también en los módulos de las próximas partes)
-   ============================================================ */
+import {
+  collection,
+  doc,
+  addDoc,
+  updateDoc,
+  setDoc,
+  getDoc,
+  deleteDoc,
+  onSnapshot,
+  query,
+  orderBy,
+  serverTimestamp,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-/** Refresca los íconos Lucide después de inyectar HTML dinámico. */
+import {
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+  deleteObject,
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+
+/* ============================================================================
+   0. HELPERS GENÉRICOS
+   ============================================================================ */
+
+const $ = (selector, scope = document) => scope.querySelector(selector);
+const $$ = (selector, scope = document) => Array.from(scope.querySelectorAll(selector));
+
+/** Vuelve a dibujar los íconos Lucide agregados dinámicamente al DOM. */
 function refreshIcons() {
-  if (window.lucide && typeof window.lucide.createIcons === "function") {
-    window.lucide.createIcons();
-  }
+  if (window.lucide) window.lucide.createIcons();
 }
 
-/** Muestra una notificación tipo toast. */
-function toast(mensaje, tipo = "info") {
-  const container = document.getElementById("toast-container");
-  if (!container) return;
+/** Guarda en qué módulo estaba el usuario, para restaurarlo si recarga la página. */
+const LAST_MODULE_KEY = "lleser_current_module";
 
-  const el = document.createElement("div");
-  el.className = `toast toast--${tipo}`;
-  el.setAttribute("role", "status");
-
-  const iconMap = { success: "check-circle-2", error: "alert-circle", info: "info" };
-  el.innerHTML = `<i data-lucide="${iconMap[tipo] || "info"}"></i><span>${mensaje}</span>`;
-
-  container.appendChild(el);
+/* ---------------- Toasts ---------------- */
+function showToast(message, type = "info") {
+  const container = $("#toast-container");
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  const icon = { success: "check-circle", error: "alert-circle", warning: "alert-triangle", info: "info" }[type];
+  toast.innerHTML = `<i data-lucide="${icon}"></i><span>${message}</span>`;
+  container.appendChild(toast);
   refreshIcons();
-
-  requestAnimationFrame(() => el.classList.add("is-visible"));
   setTimeout(() => {
-    el.classList.remove("is-visible");
-    setTimeout(() => el.remove(), 250);
+    toast.style.opacity = "0";
+    setTimeout(() => toast.remove(), 250);
   }, 4000);
 }
 
-/** Abre un modal por su id. */
-function openModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (!modal) return;
-  modal.hidden = false;
-  requestAnimationFrame(() => modal.classList.add("is-open"));
-  refreshIcons();
+/* ---------------- Modales genéricos ---------------- */
+function openModal(id) {
+  const modal = document.getElementById(id);
+  if (modal) modal.hidden = false;
 }
-
-/** Cierra un modal por su id y resetea su(s) formulario(s). */
-function closeModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (!modal) return;
-  modal.classList.remove("is-open");
-  setTimeout(() => {
-    modal.hidden = true;
-    modal.querySelectorAll("form").forEach((f) => f.reset());
-  }, 200);
+function closeModal(id) {
+  const modal = document.getElementById(id);
+  if (modal) modal.hidden = true;
 }
-
-// Delegación global: cualquier botón con [data-close-modal="id"] cierra ese modal
-document.addEventListener("click", (e) => {
-  const btn = e.target.closest("[data-close-modal]");
-  if (btn) closeModal(btn.dataset.closeModal);
+// Cualquier botón con [data-close-modal="id"] cierra ese modal.
+$$("[data-close-modal]").forEach((btn) => {
+  btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
+});
+// Clic en el fondo oscuro también cierra el modal.
+$$(".modal-overlay").forEach((overlay) => {
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) overlay.hidden = true;
+  });
 });
 
-/**
- * Abre el modal de confirmación genérico y ejecuta `onConfirm` si el
- * usuario confirma. Reutilizable por todos los módulos (eliminar
- * equipo, orden, técnico, etc.).
- */
-function confirmAction({ title = "¿Confirmar acción?", message = "Esta acción no se puede deshacer.", confirmLabel = "Eliminar", onConfirm }) {
-  const modal = document.getElementById("modal-confirm");
-  document.getElementById("modal-confirm-title").textContent = title;
-  document.getElementById("modal-confirm-message").textContent = message;
-
-  const btn = document.getElementById("btn-confirm-action");
-  btn.textContent = confirmLabel;
-
-  // Reemplaza el botón para limpiar listeners previos (evita ejecuciones duplicadas)
-  const freshBtn = btn.cloneNode(true);
-  btn.parentNode.replaceChild(freshBtn, btn);
-
-  freshBtn.addEventListener("click", async () => {
-    freshBtn.disabled = true;
-    try {
-      await onConfirm();
-      closeModal("modal-confirm");
-    } catch (err) {
-      console.error(err);
-      toast("Ocurrió un error al ejecutar la acción.", "error");
-    } finally {
-      freshBtn.disabled = false;
-    }
-  });
-
+/** Modal de confirmación reutilizable (eliminar, desactivar, etc.). */
+let pendingConfirmAction = null;
+function openConfirm(message, onConfirm, { title = "¿Confirmar acción?", confirmLabel = "Eliminar" } = {}) {
+  $("#modal-confirm-title").textContent = title;
+  $("#modal-confirm-message").textContent = message;
+  $("#btn-confirm-action").textContent = confirmLabel;
+  pendingConfirmAction = onConfirm;
   openModal("modal-confirm");
 }
+$("#btn-confirm-action").addEventListener("click", async () => {
+  if (typeof pendingConfirmAction === "function") {
+    await pendingConfirmAction();
+  }
+  pendingConfirmAction = null;
+  closeModal("modal-confirm");
+});
 
-/** Valida que un archivo sea una imagen y no supere el tamaño máximo. */
-function validarImagen(file, maxMB = APP_CONFIG.maxTamanoImagenMB) {
-  if (!file) return "No se seleccionó ningún archivo.";
-  if (!file.type.startsWith("image/")) return "El archivo debe ser una imagen.";
-  if (file.size > maxMB * 1024 * 1024) return `La imagen no debe superar ${maxMB} MB.`;
-  return null;
-}
+/* ---------------- Tabs genéricas (Equipos, Configuración, etc.) ---------------- */
+function initTabs() {
+  $$(".tabs").forEach((tabsEl) => {
+    const section = tabsEl.closest("section") || document;
+    $$(".tab", tabsEl).forEach((tabBtn) => {
+      tabBtn.addEventListener("click", () => {
+        const target = tabBtn.dataset.tab;
 
-/** Activa/desactiva el estado de "cargando" de un botón con spinner. */
-function setButtonLoading(button, loading, labelSelector = ".btn-label", spinnerSelector = ".btn-spinner") {
-  if (!button) return;
-  button.disabled = loading;
-  const label = button.querySelector(labelSelector);
-  const spinner = button.querySelector(spinnerSelector);
-  if (spinner) spinner.hidden = !loading;
-  if (label && loading) label.dataset.original = label.dataset.original || label.textContent;
-}
+        $$(".tab", tabsEl).forEach((t) => {
+          t.classList.toggle("is-active", t === tabBtn);
+          t.setAttribute("aria-selected", t === tabBtn ? "true" : "false");
+        });
 
-/* ============================================================
-   MÓDULO: CONFIGURACIÓN
-   ============================================================ */
-
-/* ---------- Sub-pestañas (Logo / Técnicos) ---------- */
-function initConfiguracionTabs() {
-  const section = document.getElementById("module-configuracion");
-  if (!section) return;
-
-  const tabs = section.querySelectorAll(".tabs .tab");
-  tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
-      const target = tab.dataset.tab;
-
-      tabs.forEach((t) => {
-        t.classList.toggle("is-active", t === tab);
-        t.setAttribute("aria-selected", t === tab ? "true" : "false");
-      });
-
-      section.querySelectorAll(".tab-panel").forEach((panel) => {
-        const isTarget = panel.id === `tab-${target}`;
-        panel.hidden = !isTarget;
-        panel.classList.toggle("is-active", isTarget);
+        $$(".tab-panel", section).forEach((panel) => {
+          const isTarget = panel.id === `tab-${target}`;
+          panel.classList.toggle("is-active", isTarget);
+          panel.hidden = !isTarget;
+        });
       });
     });
   });
 }
 
-/* ---------- 5.1 Logo de la empresa ---------- */
+/* ============================================================================
+   1. SIDEBAR / TOPBAR / NAVEGACIÓN ENTRE MÓDULOS
+   ============================================================================ */
 
-const logoPreviewEl = () => document.getElementById("logo-preview");
+function openSidebar() {
+  $("#sidebar").classList.add("is-open");
+  $("#sidebar-overlay").hidden = false;
+  $("#hamburger-btn").setAttribute("aria-expanded", "true");
+}
+function closeSidebar() {
+  $("#sidebar").classList.remove("is-open");
+  $("#sidebar-overlay").hidden = true;
+  $("#hamburger-btn").setAttribute("aria-expanded", "false");
+}
+$("#hamburger-btn").addEventListener("click", openSidebar);
+$("#sidebar-close").addEventListener("click", closeSidebar);
+$("#sidebar-overlay").addEventListener("click", closeSidebar);
 
-function renderLogoPreview(url) {
-  const preview = logoPreviewEl();
-  if (!preview) return;
+/** Cambia el módulo visible, actualiza el título del topbar y lo recuerda. */
+function goToModule(moduleName) {
+  const targetNav = $(`.nav-item[data-module="${moduleName}"]`);
+  const targetView = $(`#module-${moduleName}`);
+  if (!targetNav || !targetView) return;
 
-  if (url) {
-    preview.innerHTML = `<img src="${url}" alt="Logo de ${APP_CONFIG.nombreEmpresa}">`;
-  } else {
-    preview.innerHTML = `<i data-lucide="image"></i><span>Sin logo cargado</span>`;
-    refreshIcons();
-  }
+  // No permitir navegar a un módulo oculto por rol (por si alguien fuerza el hash/localStorage).
+  const li = targetNav.closest("li");
+  if (li && li.hidden) return;
+
+  $$(".nav-item").forEach((btn) => btn.classList.toggle("is-active", btn === targetNav));
+  $$(".module-view").forEach((view) => view.classList.toggle("is-active", view === targetView));
+
+  $("#topbar-title").textContent = targetNav.querySelector("span").textContent;
+  localStorage.setItem(LAST_MODULE_KEY, moduleName);
+  closeSidebar();
 }
 
-async function cargarLogoActual() {
-  try {
-    const snap = await getDoc(doc(db, COLLECTIONS.CONFIGURACION, APP_CONFIG.configDocId));
-    renderLogoPreview(snap.exists() ? snap.data().logoURL : null);
-  } catch (err) {
-    console.error("Error al cargar el logo:", err);
-  }
-}
+$$(".nav-item").forEach((btn) => {
+  btn.addEventListener("click", () => goToModule(btn.dataset.module));
+});
 
-async function subirLogo(file) {
-  const error = validarImagen(file);
-  if (error) return toast(error, "error");
+/* ============================================================================
+   2. AUTENTICACIÓN
+   ============================================================================ */
 
-  const btn = document.getElementById("btn-upload-logo");
-  const originalHtml = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = `<i data-lucide="loader-2" class="spin"></i> Subiendo…`;
-  refreshIcons();
+let currentUser = null;   // objeto de Firebase Auth
+let currentProfile = null; // { id, nombre, correo, rol, activo } desde Firestore
 
-  try {
-    const extension = file.name.split(".").pop();
-    const ref = storageRef(storage, `${APP_CONFIG.storagePathLogo}.${extension}`);
-    await uploadBytes(ref, file);
-    const url = await getDownloadURL(ref);
-
-    await setDoc(
-      doc(db, COLLECTIONS.CONFIGURACION, APP_CONFIG.configDocId),
-      { logoURL: url, logoActualizado: serverTimestamp() },
-      { merge: true }
-    );
-
-    renderLogoPreview(url);
-    toast("Logo actualizado correctamente.", "success");
-  } catch (err) {
-    console.error("Error al subir el logo:", err);
-    toast("No se pudo subir el logo. Intenta nuevamente.", "error");
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalHtml;
-    refreshIcons();
-  }
-}
-
-async function quitarLogo() {
-  try {
-    const refDoc = doc(db, COLLECTIONS.CONFIGURACION, APP_CONFIG.configDocId);
-    const snap = await getDoc(refDoc);
-    const data = snap.data();
-
-    if (data?.logoURL) {
-      try {
-        // Intenta borrar el archivo físico; si ya no existe, continúa sin error.
-        const path = decodeURIComponent(new URL(data.logoURL).pathname.split("/o/")[1].split("?")[0]);
-        await deleteObject(storageRef(storage, path));
-      } catch (e) {
-        console.warn("No se pudo eliminar el archivo del logo en Storage:", e);
-      }
-    }
-
-    await updateDoc(refDoc, { logoURL: null, logoActualizado: serverTimestamp() });
-    renderLogoPreview(null);
-    toast("Logo eliminado.", "success");
-  } catch (err) {
-    console.error("Error al quitar el logo:", err);
-    toast("No se pudo quitar el logo.", "error");
-  }
-}
-
-function initLogoTab() {
-  const fileInput = document.getElementById("logo-file-input");
-  const uploadBtn = document.getElementById("btn-upload-logo");
-  const removeBtn = document.getElementById("btn-remove-logo");
-
-  uploadBtn?.addEventListener("click", () => fileInput.click());
-  fileInput?.addEventListener("change", (e) => {
-    const file = e.target.files[0];
-    if (file) subirLogo(file);
-    fileInput.value = ""; // permite volver a seleccionar el mismo archivo
+/** Aplica visibilidad de módulos del sidebar según el rol del usuario. */
+function applyRoleVisibility(rol) {
+  $$("[data-role-visibility]").forEach((el) => {
+    const allowed = el.dataset.roleVisibility.split(",").map((r) => r.trim());
+    el.hidden = !allowed.includes(rol);
   });
-
-  removeBtn?.addEventListener("click", () => {
-    confirmAction({
-      title: "Quitar logo",
-      message: "El logo dejará de mostrarse en los reportes PDF. ¿Deseas continuar?",
-      confirmLabel: "Quitar logo",
-      onConfirm: quitarLogo
-    });
-  });
-
-  cargarLogoActual();
 }
 
-/* ---------- 5.2 Técnicos (CRUD + firma) ---------- */
-
-let tecnicosCache = [];       // último snapshot recibido de Firestore
-let unsubscribeTecnicos = null;
-let firmaDibujada = false;    // true si el usuario dibujó algo en el canvas actual
-
-function initTecnicosRealtime() {
-  const q = query(collection(db, COLLECTIONS.TECNICOS), orderBy("nombre"));
-  unsubscribeTecnicos = onSnapshot(
-    q,
-    (snap) => {
-      tecnicosCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      renderTecnicosTable(tecnicosCache);
-    },
-    (err) => {
-      console.error("Error al escuchar técnicos:", err);
-      toast("No se pudieron cargar los técnicos.", "error");
-    }
-  );
+function fillSidebarUser(profile) {
+  $("#sidebar-user-name").textContent = profile.nombre || profile.correo;
+  $("#sidebar-user-role").textContent = profile.rol === ROLES.ADMIN ? "Administrador" : "Técnico";
+  $("#sidebar-user-avatar").textContent = (profile.nombre || profile.correo || "?")
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase())
+    .join("");
+  $("#topbar-role-badge").textContent = profile.rol === ROLES.ADMIN ? "ADMINISTRADOR" : "TÉCNICO";
 }
 
-function renderTecnicosTable(lista) {
-  const tbody = document.getElementById("tecnicos-tbody");
-  const empty = document.getElementById("tecnicos-empty");
-  if (!tbody) return;
+async function showApp() {
+  $("#loading-screen").hidden = true;
+  $("#login-screen").hidden = true;
+  $("#app").hidden = false;
 
-  tbody.innerHTML = "";
+  applyRoleVisibility(currentProfile.rol);
+  fillSidebarUser(currentProfile);
 
-  if (!lista.length) {
-    empty.hidden = false;
+  // Restaurar el módulo donde estaba el usuario antes de recargar la página,
+  // siempre que su rol todavía tenga acceso a ese módulo.
+  const savedModule = localStorage.getItem(LAST_MODULE_KEY);
+  const savedNav = savedModule && $(`.nav-item[data-module="${savedModule}"]`);
+  const savedAllowed = savedNav && !savedNav.closest("li").hidden;
+  goToModule(savedAllowed ? savedModule : "dashboard");
+
+  // Iniciar listeners de datos del módulo de Configuración solo si es admin
+  // y solo una vez por sesión.
+  if (currentProfile.rol === ROLES.ADMIN) {
+    initConfiguracionModule();
+  }
+}
+
+function showLogin() {
+  $("#loading-screen").hidden = true;
+  $("#app").hidden = true;
+  $("#login-screen").hidden = false;
+}
+
+onAuthChange(async (user) => {
+  currentUser = user;
+
+  if (!user) {
+    currentProfile = null;
+    showLogin();
     return;
   }
-  empty.hidden = true;
 
-  lista.forEach((tec) => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(tec.nombre)}</td>
-      <td>${escapeHtml(tec.cargo || "—")}</td>
-      <td>${tec.firmaURL ? `<img class="firma-thumb" src="${tec.firmaURL}" alt="Firma de ${escapeHtml(tec.nombre)}">` : "—"}</td>
-      <td class="col-actions">
-        <button class="icon-btn" data-action="edit" data-id="${tec.id}" aria-label="Editar técnico"><i data-lucide="pencil"></i></button>
-        <button class="icon-btn icon-btn--danger" data-action="delete" data-id="${tec.id}" aria-label="Eliminar técnico"><i data-lucide="trash-2"></i></button>
-      </td>`;
-    tbody.appendChild(tr);
-  });
+  try {
+    const profile = await getUserProfile(user.uid);
+    if (!profile) {
+      // El usuario existe en Authentication pero no tiene documento de perfil/rol.
+      showToast("Tu cuenta no tiene un rol asignado. Contacta a un administrador.", "error");
+      await logout();
+      return;
+    }
+    if (profile.activo === false) {
+      showToast("Tu cuenta está inactiva. Contacta a un administrador.", "error");
+      await logout();
+      return;
+    }
+    currentProfile = profile;
+    await showApp();
+  } catch (err) {
+    console.error(err);
+    showToast("No se pudo cargar tu perfil. Intenta de nuevo.", "error");
+    showLogin();
+  }
+});
 
-  refreshIcons();
-}
+/* ---------------- Formulario de login ---------------- */
 
-function escapeHtml(str = "") {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
-}
+const LOGIN_ERROR_MESSAGES = {
+  "auth/invalid-email": "El correo no es válido.",
+  "auth/user-disabled": "Esta cuenta está deshabilitada.",
+  "auth/user-not-found": "No existe una cuenta con ese correo.",
+  "auth/wrong-password": "Contraseña incorrecta.",
+  "auth/invalid-credential": "Correo o contraseña incorrectos.",
+  "auth/too-many-requests": "Demasiados intentos. Intenta de nuevo más tarde.",
+};
 
-/* ----- Buscador local de la tabla de técnicos ----- */
-function initTecnicosSearch() {
-  const input = document.getElementById("tecnicos-search");
-  input?.addEventListener("input", () => {
-    const term = input.value.trim().toLowerCase();
-    const filtrados = !term
-      ? tecnicosCache
-      : tecnicosCache.filter((t) =>
-          `${t.nombre} ${t.cargo}`.toLowerCase().includes(term)
-        );
-    renderTecnicosTable(filtrados);
-  });
-}
-
-/* ----- Firma (canvas) ----- */
-let canvasCtx = null;
-let dibujando = false;
-
-function getCanvasPos(canvas, evt) {
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  return {
-    x: (evt.clientX - rect.left) * scaleX,
-    y: (evt.clientY - rect.top) * scaleY
-  };
-}
-
-function initFirmaCanvas() {
-  const canvas = document.getElementById("tecnico-firma-canvas");
-  if (!canvas) return;
-
-  canvasCtx = canvas.getContext("2d");
-  canvasCtx.lineWidth = 2.2;
-  canvasCtx.lineCap = "round";
-  canvasCtx.strokeStyle = "#0F2A43";
-
-  const startDraw = (evt) => {
-    dibujando = true;
-    firmaDibujada = true;
-    const { x, y } = getCanvasPos(canvas, evt);
-    canvasCtx.beginPath();
-    canvasCtx.moveTo(x, y);
-  };
-  const draw = (evt) => {
-    if (!dibujando) return;
-    const { x, y } = getCanvasPos(canvas, evt);
-    canvasCtx.lineTo(x, y);
-    canvasCtx.stroke();
-  };
-  const stopDraw = () => { dibujando = false; };
-
-  canvas.addEventListener("pointerdown", startDraw);
-  canvas.addEventListener("pointermove", draw);
-  canvas.addEventListener("pointerup", stopDraw);
-  canvas.addEventListener("pointerleave", stopDraw);
-
-  document.getElementById("btn-clear-firma")?.addEventListener("click", () => {
-    limpiarCanvas();
-    firmaDibujada = false;
-  });
-}
-
-function limpiarCanvas() {
-  const canvas = document.getElementById("tecnico-firma-canvas");
-  canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-}
-
-/** Dibuja una firma existente (URL) sobre el canvas, p. ej. al editar. */
-function cargarFirmaEnCanvas(url) {
-  const canvas = document.getElementById("tecnico-firma-canvas");
-  limpiarCanvas();
-  if (!url) { firmaDibujada = false; return; }
-
-  const img = new Image();
-  img.crossOrigin = "anonymous";
-  img.onload = () => {
-    canvasCtx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    firmaDibujada = true; // se considera "presente" aunque no haya sido redibujada
-  };
-  img.src = url;
-}
-
-function canvasEstaVacio() {
-  const canvas = document.getElementById("tecnico-firma-canvas");
-  const blank = document.createElement("canvas");
-  blank.width = canvas.width;
-  blank.height = canvas.height;
-  return canvas.toDataURL() === blank.toDataURL();
-}
-
-/** Convierte el contenido actual del canvas a Blob PNG. */
-function canvasToBlob(canvas) {
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
-}
-
-/* ----- Modal Agregar/Editar técnico ----- */
-function abrirModalTecnico(tecnico = null) {
-  const form = document.getElementById("form-tecnico");
-  form.reset();
-  limpiarCanvas();
-  firmaDibujada = false;
-
-  document.getElementById("modal-tecnico-title").textContent =
-    tecnico ? "Editar técnico" : "Agregar técnico";
-  document.getElementById("tecnico-doc-id").value = tecnico?.id || "";
-  document.getElementById("tecnico-nombre").value = tecnico?.nombre || "";
-  document.getElementById("tecnico-cargo").value = tecnico?.cargo || "";
-
-  if (tecnico?.firmaURL) cargarFirmaEnCanvas(tecnico.firmaURL);
-
-  openModal("modal-tecnico");
-}
-
-async function guardarTecnico(e) {
+$("#login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  const email = $("#login-email").value.trim();
+  const password = $("#login-password").value;
+  const errorBox = $("#login-error");
+  const submitBtn = $("#login-submit");
 
-  const idExistente = document.getElementById("tecnico-doc-id").value;
-  const nombre = document.getElementById("tecnico-nombre").value.trim();
-  const cargo = document.getElementById("tecnico-cargo").value.trim();
-  const canvas = document.getElementById("tecnico-firma-canvas");
-
-  if (!nombre || !cargo) return toast("Nombre y cargo son obligatorios.", "error");
-  if (canvasEstaVacio()) return toast("La firma es obligatoria.", "error");
-
-  const submitBtn = e.target.closest("form").parentElement
-    .querySelector('[form="form-tecnico"]') || document.querySelector('button[form="form-tecnico"]');
-  if (submitBtn) submitBtn.disabled = true;
+  errorBox.hidden = true;
+  submitBtn.disabled = true;
+  $(".btn-label", submitBtn).hidden = true;
+  $(".btn-spinner", submitBtn).hidden = false;
 
   try {
-    // Determina/crea el ID del documento primero, para poder nombrar
-    // el archivo de la firma en Storage de forma consistente.
-    const refDoc = idExistente
-      ? doc(db, COLLECTIONS.TECNICOS, idExistente)
-      : doc(collection(db, COLLECTIONS.TECNICOS));
-
-    const blob = await canvasToBlob(canvas);
-    const firmaRef = storageRef(storage, `${APP_CONFIG.storagePathFirmas}/${refDoc.id}.png`);
-    await uploadBytes(firmaRef, blob);
-    const firmaURL = await getDownloadURL(firmaRef);
-
-    const payload = {
-      nombre,
-      cargo,
-      firmaURL,
-      actualizadoEn: serverTimestamp()
-    };
-
-    if (idExistente) {
-      await updateDoc(refDoc, payload);
-      toast("Técnico actualizado.", "success");
-    } else {
-      payload.creadoEn = serverTimestamp();
-      await setDoc(refDoc, payload);
-      toast("Técnico agregado.", "success");
-    }
-
-    closeModal("modal-tecnico");
+    await login(email, password);
+    // onAuthChange se encarga de mostrar la app.
   } catch (err) {
-    console.error("Error al guardar técnico:", err);
-    toast("No se pudo guardar el técnico.", "error");
+    errorBox.textContent = LOGIN_ERROR_MESSAGES[err.code] || "No se pudo iniciar sesión. Intenta de nuevo.";
+    errorBox.hidden = false;
   } finally {
-    if (submitBtn) submitBtn.disabled = false;
+    submitBtn.disabled = false;
+    $(".btn-label", submitBtn).hidden = false;
+    $(".btn-spinner", submitBtn).hidden = true;
   }
-}
+});
 
-async function eliminarTecnico(tecnico) {
-  try {
-    await deleteDoc(doc(db, COLLECTIONS.TECNICOS, tecnico.id));
-    if (tecnico.firmaURL) {
-      try {
-        await deleteObject(storageRef(storage, `${APP_CONFIG.storagePathFirmas}/${tecnico.id}.png`));
-      } catch (e) {
-        console.warn("No se pudo eliminar el archivo de firma:", e);
-      }
-    }
-    toast("Técnico eliminado.", "success");
-  } catch (err) {
-    console.error("Error al eliminar técnico:", err);
-    throw err; // permite que confirmAction muestre el toast de error genérico
-  }
-}
+$("#toggle-password").addEventListener("click", () => {
+  const input = $("#login-password");
+  const icon = $("#toggle-password i");
+  const isHidden = input.type === "password";
+  input.type = isHidden ? "text" : "password";
+  icon.setAttribute("data-lucide", isHidden ? "eye-off" : "eye");
+  refreshIcons();
+});
 
-function initTecnicosTab() {
-  initFirmaCanvas();
-  initTecnicosRealtime();
-  initTecnicosSearch();
+$("#logout-btn").addEventListener("click", async () => {
+  await logout();
+  localStorage.removeItem(LAST_MODULE_KEY);
+});
 
-  document.getElementById("btn-add-tecnico")?.addEventListener("click", () => abrirModalTecnico());
-  document.getElementById("form-tecnico")?.addEventListener("submit", guardarTecnico);
+/* ============================================================================
+   3. MÓDULO DE CONFIGURACIÓN
+   ============================================================================ */
 
-  document.getElementById("tecnicos-tbody")?.addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-action]");
-    if (!btn) return;
-    const tecnico = tecnicosCache.find((t) => t.id === btn.dataset.id);
-    if (!tecnico) return;
+let configuracionInitialized = false;
 
-    if (btn.dataset.action === "edit") {
-      abrirModalTecnico(tecnico);
-    } else if (btn.dataset.action === "delete") {
-      confirmAction({
-        title: "Eliminar técnico",
-        message: `¿Eliminar a "${tecnico.nombre}"? Esta acción no se puede deshacer.`,
-        confirmLabel: "Eliminar",
-        onConfirm: () => eliminarTecnico(tecnico)
-      });
-    }
-  });
-}
-
-/* ---------- Init general del módulo Configuración ---------- */
 function initConfiguracionModule() {
-  initConfiguracionTabs();
+  if (configuracionInitialized) return; // evitar duplicar listeners de Firestore
+  configuracionInitialized = true;
+
   initLogoTab();
   initTecnicosTab();
+  initUsuariosTab();
 }
 
-/* ============================================================
-   ESTADO GLOBAL DE SESIÓN
-   ============================================================ */
-let currentUser = null; // { uid, email, nombre, rol }
+/* ----------------------------------------------------------------------
+   3.1 LOGO DE LA EMPRESA
+   Se guarda en Storage (configuracion/logo.<ext>) y la URL en el documento
+   Firestore configuracion/general → { logoUrl }. Ese mismo documento es el
+   que se leerá más adelante desde la generación de PDF para incluir el logo.
+---------------------------------------------------------------------- */
+const CONFIG_DOC_ID = "general";
 
-// Roles permitidos por módulo (según el prompt original)
-const MODULE_ROLES = {
-  dashboard: [ROLES.ADMIN, ROLES.TECNICO],
-  equipos: [ROLES.ADMIN],
-  ordenes: [ROLES.ADMIN],
-  "reportes-ot": [ROLES.ADMIN, ROLES.TECNICO],
-  "reportes-correctivos": [ROLES.ADMIN, ROLES.TECNICO],
-  configuracion: [ROLES.ADMIN]
-};
+function initLogoTab() {
+  const preview = $("#logo-preview");
+  const fileInput = $("#logo-file-input");
 
-// Módulos con lógica ya implementada. Se inicializan UNA sola vez,
-// la primera vez que el usuario entra a cada uno (lazy loading).
-const moduleInitializers = {
-  configuracion: initConfiguracionModule
-  // equipos, ordenes, reportes-ot, reportes-correctivos: próximas partes
-};
-const modulosInicializados = new Set();
+  async function loadLogo() {
+    const snap = await getDoc(doc(db, COLLECTIONS.CONFIGURACION, CONFIG_DOC_ID));
+    const logoUrl = snap.exists() ? snap.data().logoUrl : null;
+    renderLogoPreview(logoUrl);
+  }
 
-/* ============================================================
-   AUTENTICACIÓN
-   ============================================================ */
+  function renderLogoPreview(url) {
+    if (url) {
+      preview.innerHTML = `<img src="${url}" alt="Logo de LleSer Ltda.">`;
+    } else {
+      preview.innerHTML = `<i data-lucide="image"></i><span>Sin logo cargado</span>`;
+      refreshIcons();
+    }
+  }
 
-/** pantalla: "loading" | "login" | "app" */
-function mostrarPantalla(pantalla) {
-  document.getElementById("loading-screen").hidden = pantalla !== "loading";
-  document.getElementById("login-screen").hidden = pantalla !== "login";
-  document.getElementById("app").hidden = pantalla !== "app";
-}
+  $("#btn-upload-logo").addEventListener("click", () => fileInput.click());
 
-async function obtenerPerfilUsuario(uid) {
-  const snap = await getDoc(doc(db, COLLECTIONS.USUARIOS, uid));
-  return snap.exists() ? snap.data() : null;
-}
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
 
-function mensajeErrorAuth(code) {
-  const mensajes = {
-    "auth/invalid-email": "El correo electrónico no es válido.",
-    "auth/user-disabled": "Este usuario ha sido deshabilitado.",
-    "auth/user-not-found": "No existe una cuenta con este correo.",
-    "auth/wrong-password": "Contraseña incorrecta.",
-    "auth/invalid-credential": "Correo o contraseña incorrectos.",
-    "auth/too-many-requests": "Demasiados intentos. Intenta más tarde."
-  };
-  return mensajes[code] || "No se pudo iniciar sesión. Intenta nuevamente.";
-}
-
-/** Escucha los cambios de sesión y decide qué pantalla mostrar. */
-function initAuthListener() {
-  onAuthStateChanged(auth, async (user) => {
-    if (!user) {
-      currentUser = null;
-      modulosInicializados.clear();
-      mostrarPantalla("login");
+    if (!["image/png", "image/jpeg", "image/svg+xml"].includes(file.type)) {
+      showToast("El logo debe ser PNG, JPG o SVG.", "error");
       return;
     }
 
     try {
-      const perfil = await obtenerPerfilUsuario(user.uid);
-      if (!perfil || !perfil.rol) {
-        toast("Tu usuario no tiene un perfil configurado. Contacta al administrador.", "error");
-        await signOut(auth);
-        return;
-      }
+      const ext = file.name.split(".").pop();
+      const ref = storageRef(storage, `configuracion/logo.${ext}`);
+      await uploadBytes(ref, file);
+      const url = await getDownloadURL(ref);
 
-      currentUser = {
-        uid: user.uid,
-        email: user.email,
-        nombre: perfil.nombre || user.email,
-        rol: perfil.rol
-      };
-
-      iniciarApp();
+      await setDoc(doc(db, COLLECTIONS.CONFIGURACION, CONFIG_DOC_ID), { logoUrl: url }, { merge: true });
+      renderLogoPreview(url);
+      showToast("Logo actualizado correctamente.", "success");
     } catch (err) {
-      console.error("Error al cargar el perfil del usuario:", err);
-      toast("No se pudo cargar tu perfil. Intenta nuevamente.", "error");
-      await signOut(auth);
-    }
-  });
-}
-
-function initLoginForm() {
-  const form = document.getElementById("login-form");
-  const errorEl = document.getElementById("login-error");
-  const submitBtn = document.getElementById("login-submit");
-  const toggleBtn = document.getElementById("toggle-password");
-  const passwordInput = document.getElementById("login-password");
-
-  toggleBtn?.addEventListener("click", () => {
-    const showing = passwordInput.type === "text";
-    passwordInput.type = showing ? "password" : "text";
-    toggleBtn.innerHTML = `<i data-lucide="${showing ? "eye" : "eye-off"}"></i>`;
-    refreshIcons();
-  });
-
-  form?.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    errorEl.hidden = true;
-
-    const email = document.getElementById("login-email").value.trim();
-    const password = document.getElementById("login-password").value;
-
-    setButtonLoading(submitBtn, true);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      // onAuthStateChanged se encarga de mostrar la app
-    } catch (err) {
-      console.error("Error de inicio de sesión:", err);
-      errorEl.textContent = mensajeErrorAuth(err.code);
-      errorEl.hidden = false;
+      console.error(err);
+      showToast("No se pudo cargar el logo.", "error");
     } finally {
-      setButtonLoading(submitBtn, false);
+      fileInput.value = "";
+    }
+  });
+
+  $("#btn-remove-logo").addEventListener("click", () => {
+    openConfirm(
+      "¿Quitar el logo de la empresa? Los próximos reportes en PDF se generarán sin logo.",
+      async () => {
+        try {
+          const snap = await getDoc(doc(db, COLLECTIONS.CONFIGURACION, CONFIG_DOC_ID));
+          const logoUrl = snap.exists() ? snap.data().logoUrl : null;
+          if (logoUrl) {
+            // Intentamos borrar el archivo de Storage; si ya no existe, seguimos igual.
+            const path = decodeURIComponent(new URL(logoUrl).pathname.split("/o/")[1].split("?")[0]);
+            await deleteObject(storageRef(storage, path)).catch(() => {});
+          }
+          await setDoc(doc(db, COLLECTIONS.CONFIGURACION, CONFIG_DOC_ID), { logoUrl: null }, { merge: true });
+          renderLogoPreview(null);
+          showToast("Logo eliminado.", "success");
+        } catch (err) {
+          console.error(err);
+          showToast("No se pudo quitar el logo.", "error");
+        }
+      },
+      { title: "Quitar logo", confirmLabel: "Quitar" }
+    );
+  });
+
+  loadLogo();
+}
+
+/* ----------------------------------------------------------------------
+   3.2 TÉCNICOS (ficha: nombre, cargo, firma)
+   La firma se captura en un <canvas> y se guarda como Data URL (base64)
+   directamente en el documento de Firestore. Es un dato pequeño (una
+   firma simple no pasa de unos pocos KB) así que no requiere Storage.
+---------------------------------------------------------------------- */
+let tecnicosCache = [];
+let signaturePad = null; // { canvas, ctx, drawing, hasStroke }
+
+function initTecnicosTab() {
+  const tbody = $("#tecnicos-tbody");
+  const empty = $("#tecnicos-empty");
+  const search = $("#tecnicos-search");
+
+  const q = query(collection(db, COLLECTIONS.TECNICOS), orderBy("nombre"));
+  onSnapshot(q, (snap) => {
+    tecnicosCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderTecnicos(search.value);
+  });
+
+  function renderTecnicos(filterText = "") {
+    const filtered = tecnicosCache.filter((t) => {
+      const haystack = `${t.nombre} ${t.cargo}`.toLowerCase();
+      return haystack.includes(filterText.trim().toLowerCase());
+    });
+
+    tbody.innerHTML = filtered
+      .map(
+        (t) => `
+      <tr data-id="${t.id}">
+        <td>${escapeHtml(t.nombre)}</td>
+        <td>${escapeHtml(t.cargo)}</td>
+        <td>${t.firmaDataUrl ? `<img class="signature-thumb" src="${t.firmaDataUrl}" alt="Firma de ${escapeHtml(t.nombre)}">` : "—"}</td>
+        <td class="col-actions">
+          <span class="row-actions">
+            <button class="icon-btn" data-action="edit" aria-label="Editar"><i data-lucide="pencil"></i></button>
+            <button class="icon-btn" data-action="delete" aria-label="Eliminar"><i data-lucide="trash-2"></i></button>
+          </span>
+        </td>
+      </tr>`
+      )
+      .join("");
+
+    empty.hidden = filtered.length > 0;
+    refreshIcons();
+  }
+
+  search.addEventListener("input", () => renderTecnicos(search.value));
+
+  tbody.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-action]");
+    if (!btn) return;
+    const row = btn.closest("tr");
+    const tecnico = tecnicosCache.find((t) => t.id === row.dataset.id);
+
+    if (btn.dataset.action === "edit") openTecnicoModal(tecnico);
+    if (btn.dataset.action === "delete") {
+      openConfirm(`¿Eliminar al técnico "${tecnico.nombre}"? Esta acción no se puede deshacer.`, async () => {
+        await deleteDoc(doc(db, COLLECTIONS.TECNICOS, tecnico.id));
+        showToast("Técnico eliminado.", "success");
+      });
+    }
+  });
+
+  $("#btn-add-tecnico").addEventListener("click", () => openTecnicoModal(null));
+
+  initSignaturePad();
+
+  $("#form-tecnico").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = $("#tecnico-doc-id").value;
+    const nombre = $("#tecnico-nombre").value.trim();
+    const cargo = $("#tecnico-cargo").value.trim();
+
+    if (!nombre || !cargo) {
+      showToast("Nombre y cargo son obligatorios.", "error");
+      return;
+    }
+    if (!signaturePad.hasStroke && !id) {
+      showToast("La firma es obligatoria.", "error");
+      return;
+    }
+
+    const data = { nombre, cargo };
+    // Si el usuario no volvió a firmar al editar, conservamos la firma anterior.
+    if (signaturePad.hasStroke) {
+      data.firmaDataUrl = signaturePad.canvas.toDataURL("image/png");
+    }
+
+    try {
+      if (id) {
+        await updateDoc(doc(db, COLLECTIONS.TECNICOS, id), data);
+        showToast("Técnico actualizado.", "success");
+      } else {
+        data.firmaDataUrl = data.firmaDataUrl || null;
+        data.creadoEn = serverTimestamp();
+        await addDoc(collection(db, COLLECTIONS.TECNICOS), data);
+        showToast("Técnico agregado.", "success");
+      }
+      closeModal("modal-tecnico");
+    } catch (err) {
+      console.error(err);
+      showToast("No se pudo guardar el técnico.", "error");
     }
   });
 }
 
-function initLogout() {
-  document.getElementById("logout-btn")?.addEventListener("click", () => {
-    confirmAction({
-      title: "Cerrar sesión",
-      message: "¿Seguro que deseas cerrar sesión?",
-      confirmLabel: "Cerrar sesión",
-      onConfirm: async () => {
-        await signOut(auth);
-        window.location.hash = "";
-      }
+function openTecnicoModal(tecnico) {
+  $("#form-tecnico").reset();
+  $("#tecnico-doc-id").value = tecnico?.id || "";
+  $("#tecnico-nombre").value = tecnico?.nombre || "";
+  $("#tecnico-cargo").value = tecnico?.cargo || "";
+  $("#modal-tecnico-title").textContent = tecnico ? "Editar técnico" : "Agregar técnico";
+
+  clearSignaturePad();
+  if (tecnico?.firmaDataUrl) {
+    drawImageOnSignaturePad(tecnico.firmaDataUrl);
+    signaturePad.hasStroke = false; // no se re-sube a menos que el usuario dibuje encima
+  }
+
+  openModal("modal-tecnico");
+}
+
+/** Pad de firma: dibujo simple con mouse y con touch (para tablets/celulares). */
+function initSignaturePad() {
+  const canvas = $("#tecnico-firma-canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.strokeStyle = "#0F2A43";
+
+  signaturePad = { canvas, ctx, drawing: false, hasStroke: false };
+
+  function getPos(evt) {
+    const rect = canvas.getBoundingClientRect();
+    const point = evt.touches ? evt.touches[0] : evt;
+    return {
+      x: ((point.clientX - rect.left) / rect.width) * canvas.width,
+      y: ((point.clientY - rect.top) / rect.height) * canvas.height,
+    };
+  }
+
+  function start(evt) {
+    evt.preventDefault();
+    signaturePad.drawing = true;
+    signaturePad.hasStroke = true;
+    const { x, y } = getPos(evt);
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }
+  function move(evt) {
+    if (!signaturePad.drawing) return;
+    evt.preventDefault();
+    const { x, y } = getPos(evt);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  }
+  function end() {
+    signaturePad.drawing = false;
+  }
+
+  canvas.addEventListener("mousedown", start);
+  canvas.addEventListener("mousemove", move);
+  window.addEventListener("mouseup", end);
+  canvas.addEventListener("touchstart", start, { passive: false });
+  canvas.addEventListener("touchmove", move, { passive: false });
+  canvas.addEventListener("touchend", end);
+
+  $("#btn-clear-firma").addEventListener("click", clearSignaturePad);
+}
+
+function clearSignaturePad() {
+  const { canvas, ctx } = signaturePad;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  signaturePad.hasStroke = false;
+}
+
+function drawImageOnSignaturePad(dataUrl) {
+  const { canvas, ctx } = signaturePad;
+  const img = new Image();
+  img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  img.src = dataUrl;
+}
+
+/* ----------------------------------------------------------------------
+   3.3 USUARIOS (cuentas de acceso + rol)
+   Solo visible/usable por administradores. Crear usuario usa
+   createUserWithRole() de config.js (Authentication + Firestore).
+   Editar usuario solo actualiza nombre/rol/estado en Firestore: el correo
+   y la contraseña de Authentication no se pueden cambiar desde aquí sin
+   una Cloud Function con el Admin SDK.
+---------------------------------------------------------------------- */
+let usuariosCache = [];
+
+function initUsuariosTab() {
+  const tbody = $("#usuarios-tbody");
+  const empty = $("#usuarios-empty");
+  const search = $("#usuarios-search");
+
+  const q = query(collection(db, COLLECTIONS.USUARIOS), orderBy("nombre"));
+  onSnapshot(q, (snap) => {
+    usuariosCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderUsuarios(search.value);
+  });
+
+  function renderUsuarios(filterText = "") {
+    const filtered = usuariosCache.filter((u) => {
+      const haystack = `${u.nombre} ${u.correo}`.toLowerCase();
+      return haystack.includes(filterText.trim().toLowerCase());
     });
-  });
-}
 
-/* ============================================================
-   ROUTER DE MÓDULOS (sidebar + hash persistente)
-   ============================================================ */
+    tbody.innerHTML = filtered
+      .map(
+        (u) => `
+      <tr data-id="${u.id}">
+        <td>${escapeHtml(u.nombre)}</td>
+        <td>${escapeHtml(u.correo)}</td>
+        <td>${u.rol === ROLES.ADMIN ? "Administrador" : "Técnico"}</td>
+        <td><span class="status-tag ${u.activo === false ? "status-fuera-servicio" : "status-operativo"}">${u.activo === false ? "Inactivo" : "Activo"}</span></td>
+        <td class="col-actions">
+          <span class="row-actions">
+            <button class="icon-btn" data-action="edit" aria-label="Editar"><i data-lucide="pencil"></i></button>
+          </span>
+        </td>
+      </tr>`
+      )
+      .join("");
 
-function aplicarVisibilidadPorRol() {
-  document.querySelectorAll("[data-role-visibility]").forEach((el) => {
-    const permitidos = el.dataset.roleVisibility.split(",").map((r) => r.trim());
-    el.hidden = !permitidos.includes(currentUser.rol);
-  });
-}
-
-function moduloPermitido(modulo) {
-  const permitidos = MODULE_ROLES[modulo];
-  return permitidos ? permitidos.includes(currentUser.rol) : false;
-}
-
-function primerModuloDisponible() {
-  return Object.keys(MODULE_ROLES).find((m) => moduloPermitido(m)) || "dashboard";
-}
-
-/** Cambia de módulo activo, actualiza el hash de la URL y hace lazy-init. */
-function irAModulo(modulo, { updateHash = true } = {}) {
-  if (!moduloPermitido(modulo)) {
-    toast("No tienes acceso a ese módulo.", "error");
-    modulo = primerModuloDisponible();
+    empty.hidden = filtered.length > 0;
+    refreshIcons();
   }
 
-  document.querySelectorAll(".nav-item[data-module]").forEach((btn) => {
-    btn.classList.toggle("is-active", btn.dataset.module === modulo);
+  search.addEventListener("input", () => renderUsuarios(search.value));
+
+  tbody.addEventListener("click", (e) => {
+    const btn = e.target.closest("button[data-action='edit']");
+    if (!btn) return;
+    const row = btn.closest("tr");
+    const usuario = usuariosCache.find((u) => u.id === row.dataset.id);
+    openUsuarioModal(usuario);
   });
 
-  document.querySelectorAll(".module-view[data-module]").forEach((view) => {
-    view.classList.toggle("is-active", view.dataset.module === modulo);
+  $("#btn-add-usuario").addEventListener("click", () => openUsuarioModal(null));
+
+  $("#form-usuario").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const id = $("#usuario-doc-id").value;
+    const nombre = $("#usuario-nombre").value.trim();
+    const correo = $("#usuario-correo").value.trim();
+    const password = $("#usuario-password").value;
+    const rol = $("#usuario-rol").value;
+    const activo = $("#usuario-activo").value === "true";
+
+    if (!nombre || !correo) {
+      showToast("Nombre y correo son obligatorios.", "error");
+      return;
+    }
+
+    try {
+      if (id) {
+        // Edición: solo nombre, rol y estado (correo/contraseña no se tocan aquí).
+        if (id === currentUser.uid && !activo) {
+          showToast("No puedes desactivar tu propia cuenta.", "error");
+          return;
+        }
+        if (id === currentUser.uid && rol !== ROLES.ADMIN) {
+          showToast("No puedes quitarte a ti mismo el rol de administrador.", "error");
+          return;
+        }
+        await updateDoc(doc(db, COLLECTIONS.USUARIOS, id), { nombre, rol, activo });
+        showToast("Usuario actualizado.", "success");
+      } else {
+        if (!password || password.length < 6) {
+          showToast("La contraseña debe tener al menos 6 caracteres.", "error");
+          return;
+        }
+        await createUserWithRole({ nombre, correo, password, rol });
+        showToast("Usuario creado correctamente.", "success");
+      }
+      closeModal("modal-usuario");
+    } catch (err) {
+      console.error(err);
+      const msg = err.code === "auth/email-already-in-use"
+        ? "Ya existe una cuenta con ese correo."
+        : "No se pudo guardar el usuario.";
+      showToast(msg, "error");
+    }
   });
-
-  const activeBtn = document.querySelector(`.nav-item[data-module="${modulo}"]`);
-  document.getElementById("topbar-title").textContent =
-    activeBtn?.querySelector("span")?.textContent || "Inicio";
-
-  if (updateHash) window.location.hash = modulo;
-
-  cerrarSidebarMovil();
-
-  // Lazy loading: cada módulo solo inicializa sus listeners/datos una vez
-  if (!modulosInicializados.has(modulo) && moduleInitializers[modulo]) {
-    moduleInitializers[modulo]();
-    modulosInicializados.add(modulo);
-  }
 }
 
-function moduloInicial() {
-  const desdeHash = window.location.hash.replace("#", "");
-  if (desdeHash && moduloPermitido(desdeHash)) return desdeHash;
-  return primerModuloDisponible();
+function openUsuarioModal(usuario) {
+  $("#form-usuario").reset();
+  $("#usuario-doc-id").value = usuario?.id || "";
+  $("#usuario-nombre").value = usuario?.nombre || "";
+  $("#usuario-correo").value = usuario?.correo || "";
+  $("#usuario-rol").value = usuario?.rol || ROLES.TECNICO;
+  $("#usuario-activo").value = usuario?.activo === false ? "false" : "true";
+
+  // El correo y la contraseña solo se piden al crear la cuenta.
+  $("#usuario-correo").disabled = Boolean(usuario);
+  $("#usuario-password-field").hidden = Boolean(usuario);
+  $("#usuario-password").required = !usuario;
+
+  $("#modal-usuario-title").textContent = usuario ? "Editar usuario" : "Crear usuario";
+  openModal("modal-usuario");
 }
 
-function initRouter() {
-  document.querySelectorAll(".nav-item[data-module]").forEach((btn) => {
-    btn.addEventListener("click", () => irAModulo(btn.dataset.module));
-  });
-
-  // Permite que el botón "atrás/adelante" del navegador y F5 respeten el módulo activo
-  window.addEventListener("hashchange", () => {
-    const modulo = window.location.hash.replace("#", "") || "dashboard";
-    irAModulo(modulo, { updateHash: false });
-  });
+/* ============================================================================
+   UTILIDADES VARIAS
+   ============================================================================ */
+function escapeHtml(str = "") {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
-/* ---------- Sidebar móvil (botón hamburguesa) ---------- */
-function initSidebarMovil() {
-  const sidebar = document.getElementById("sidebar");
-  const overlay = document.getElementById("sidebar-overlay");
-  const hamburger = document.getElementById("hamburger-btn");
-  const closeBtn = document.getElementById("sidebar-close");
-
-  const abrir = () => {
-    sidebar.classList.add("is-open");
-    overlay.hidden = false;
-    requestAnimationFrame(() => overlay.classList.add("is-visible"));
-    hamburger.setAttribute("aria-expanded", "true");
-  };
-
-  hamburger?.addEventListener("click", abrir);
-  overlay?.addEventListener("click", cerrarSidebarMovil);
-  closeBtn?.addEventListener("click", cerrarSidebarMovil);
-}
-
-function cerrarSidebarMovil() {
-  const sidebar = document.getElementById("sidebar");
-  const overlay = document.getElementById("sidebar-overlay");
-  const hamburger = document.getElementById("hamburger-btn");
-  if (!sidebar) return;
-
-  sidebar.classList.remove("is-open");
-  overlay.classList.remove("is-visible");
-  hamburger.setAttribute("aria-expanded", "false");
-  setTimeout(() => { overlay.hidden = true; }, 200);
-}
-
-/* ============================================================
-   ARRANQUE DE LA APLICACIÓN (tras autenticación exitosa)
-   ============================================================ */
-function iniciarApp() {
-  aplicarVisibilidadPorRol();
-
-  document.getElementById("sidebar-user-name").textContent = currentUser.nombre;
-  document.getElementById("sidebar-user-avatar").textContent =
-    currentUser.nombre.trim().charAt(0).toUpperCase();
-
-  const rolLabel = currentUser.rol === ROLES.ADMIN ? "Administrador" : "Técnico";
-  document.getElementById("sidebar-user-role").textContent = rolLabel;
-  document.getElementById("topbar-role-badge").textContent = rolLabel;
-
-  mostrarPantalla("app");
-  irAModulo(moduloInicial(), { updateHash: true });
-  refreshIcons();
-}
-
-/* ============================================================
-   ARRANQUE GENERAL
-   ============================================================ */
+/* ============================================================================
+   ARRANQUE
+   ============================================================================ */
 document.addEventListener("DOMContentLoaded", () => {
+  initTabs();
   refreshIcons();
-  initLoginForm();
-  initLogout();
-  initRouter();
-  initSidebarMovil();
-  initAuthListener(); // decide: loading -> login, o loading -> app
 });

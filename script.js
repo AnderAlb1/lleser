@@ -1853,4 +1853,357 @@ const Controller = {
 
     irAEquipo(id) {
         View.hideSearchResults();
-        document.getElementById('
+        document.getElementById('historial-equipo-select').value = id;
+        View.setActiveModule('equipos-historial');
+        this.loadEquiposHistorialSelect().then(() => {
+            document.getElementById('historial-equipo-select').value = id;
+            this.cargarHistorial(id);
+        });
+    },
+
+    irAOrden(id) {
+        View.hideSearchResults();
+        // Buscar la orden y abrir su edición o reporte
+        View.setActiveModule('ordenes');
+        this.loadOrdenes();
+    },
+
+    // --- BÚSQUEDA ---
+    async handleSearch(term) {
+        try {
+            const results = await Model.buscarGlobal(term);
+            View.renderSearchResults(results);
+        } catch (err) { console.error(err); }
+    },
+
+    // --- FOTOS ---
+    setupPhotoUpload(prefix) {
+        const uploadArea = document.getElementById(`${prefix}-photo-upload`);
+        const fileInput = document.getElementById(`${prefix}-photo-input`);
+
+        if (uploadArea) {
+            uploadArea.addEventListener('click', () => fileInput.click());
+            uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.classList.add('drag-over'); });
+            uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag-over'));
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('drag-over');
+                const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+                this.processPhotos(files, prefix);
+            });
+        }
+
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
+                this.processPhotos(files, prefix);
+                e.target.value = '';
+            });
+        }
+    },
+
+    async processPhotos(files, prefix) {
+        const max = APP_CONFIG.maxFotosEvidencia;
+        const remaining = max - AppState.tempPhotos[prefix].length;
+        const toProcess = files.slice(0, remaining);
+
+        if (files.length > remaining) {
+            View.toast(`Máximo ${max} fotos. Se tomarán las primeras ${remaining}`, 'warning');
+        }
+
+        for (const file of toProcess) {
+            const base64 = await this.comprimirImagen(file, APP_CONFIG.maxTamannoFoto, APP_CONFIG.calidadFoto);
+            AppState.tempPhotos[prefix].push(base64);
+        }
+        View.renderPhotoGrid(AppState.tempPhotos[prefix], prefix);
+    },
+
+    removePhoto(prefix, index) {
+        AppState.tempPhotos[prefix].splice(index, 1);
+        View.renderPhotoGrid(AppState.tempPhotos[prefix], prefix);
+    },
+
+    comprimirImagen(file, maxAncho, calidad) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let w = img.width, h = img.height;
+                    if (w > maxAncho) { h = (maxAncho / w) * h; w = maxAncho; }
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, w, h);
+                    resolve(canvas.toDataURL('image/jpeg', calidad));
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+    },
+
+    // --- FIRMAS ---
+    setupSignatureCanvas(canvasId, prefix) {
+        const canvas = document.getElementById(canvasId);
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let drawing = false;
+
+        // Ajustar tamaño del canvas al contenedor
+        const resize = () => {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            const tempData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            canvas.width = rect.width - 4;
+            canvas.height = 120;
+            ctx.putImageData(tempData, 0, 0);
+            ctx.strokeStyle = '#1A2332';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+        };
+        resize();
+        window.addEventListener('resize', resize);
+
+        const getPos = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.touches ? e.touches[0] : e;
+            return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+        };
+
+        const start = (e) => { e.preventDefault(); drawing = true; const p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); };
+        const move = (e) => { if (!drawing) return; e.preventDefault(); const p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); };
+        const end = () => { drawing = false; AppState.firmaData[prefix] = canvas.toDataURL('image/png'); };
+
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('mousemove', move);
+        canvas.addEventListener('mouseup', end);
+        canvas.addEventListener('mouseleave', end);
+        canvas.addEventListener('touchstart', start, { passive: false });
+        canvas.addEventListener('touchmove', move, { passive: false });
+        canvas.addEventListener('touchend', end);
+    },
+
+    limpiarFirma(prefix) {
+        const canvasMap = { ro: 'ro-firma-canvas', rc: 'rc-firma-canvas', tc: 'tc-firma-canvas' };
+        const canvas = document.getElementById(canvasMap[prefix]);
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+        AppState.firmaData[prefix] = null;
+    },
+
+    // --- LOGO ---
+    async handleLogoUpload(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const base64 = await this.comprimirImagen(file, 400, 0.8);
+        try {
+            await Model.setLogo(base64);
+            View.renderLogoPreview(base64);
+            View.toast('Logo actualizado correctamente');
+        } catch (err) { View.toast('Error al subir logo', 'danger'); }
+    },
+
+    async removeLogo() {
+        try {
+            await Model.removeLogo();
+            View.renderLogoPreview(null);
+            View.toast('Logo eliminado');
+        } catch (err) { View.toast('Error al eliminar logo', 'danger'); }
+    },
+
+    // --- GENERACIÓN DE PDFs ---
+    async generarPDFReporteOrden() {
+        if (!AppState.lastSavedReport) return;
+        View.toast('Generando PDF...', 'warning');
+        try {
+            const doc = await db.collection('reportesOrdenes').doc(AppState.lastSavedReport).get();
+            if (!doc.exists) { View.toast('Reporte no encontrado', 'danger'); return; }
+            const data = doc.data();
+            const logo = await Model.getLogo();
+            this.construirPDF(data, logo, 'REPORTE DE ORDEN DE TRABAJO');
+        } catch (err) { View.toast('Error al generar PDF', 'danger'); console.error(err); }
+    },
+
+    async generarPDFCorrectivo(id) {
+        View.toast('Generando PDF...', 'warning');
+        try {
+            const data = await Model.getCorrectivoById(id);
+            if (!data) { View.toast('Reporte no encontrado', 'danger'); return; }
+            const logo = await Model.getLogo();
+            this.construirPDF(data, logo, 'REPORTE DE MANTENIMIENTO CORRECTIVO');
+        } catch (err) { View.toast('Error al generar PDF', 'danger'); console.error(err); }
+    },
+
+    async generarPDFHistorial(tipo, id) {
+        View.toast('Generando PDF...', 'warning');
+        try {
+            let data;
+            if (tipo === 'orden') {
+                const doc = await db.collection('reportesOrdenes').doc(id).get();
+                data = doc.exists ? doc.data() : null;
+            } else {
+                data = await Model.getCorrectivoById(id);
+            }
+            if (!data) { View.toast('No encontrado', 'danger'); return; }
+            const logo = await Model.getLogo();
+            this.construirPDF(data, logo, 'REPORTE DE MANTENIMIENTO');
+        } catch (err) { View.toast('Error al generar PDF', 'danger'); }
+    },
+
+    construirPDF(data, logo, titulo) {
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pw = 210, ph = 297, margin = 15;
+        let y = margin;
+
+        // Encabezado con logo y nombre de empresa
+        if (logo) {
+            try { pdf.addImage(logo, 'JPEG', margin, y, 35, 18); } catch(e) {}
+        }
+        pdf.setFontSize(16);
+        pdf.setFont(undefined, 'bold');
+        pdf.text(APP_CONFIG.nombreEmpresa, logo ? margin + 40 : margin, y + 10);
+        pdf.setFontSize(9);
+        pdf.setFont(undefined, 'normal');
+        pdf.text('NIT: 901.234.567-8', logo ? margin + 40 : margin, y + 16);
+        y += 25;
+
+        // Línea separadora
+        pdf.setDrawColor(13, 92, 143);
+        pdf.setLineWidth(0.8);
+        pdf.line(margin, y, pw - margin, y);
+        y += 8;
+
+        // Título del reporte
+        pdf.setFontSize(13);
+        pdf.setFont(undefined, 'bold');
+        pdf.setTextColor(13, 92, 143);
+        pdf.text(titulo, pw / 2, y, { align: 'center' });
+        pdf.setTextColor(0, 0, 0);
+        y += 10;
+
+        // Número de reporte
+        const numReporte = data.consecutivoOrden ? `Orden No. ${String(data.consecutivoOrden).padStart(4, '0')}` : `RC-${String(data.consecutivo || 0).padStart(4, '0')}`;
+        pdf.setFontSize(11);
+        pdf.text(numReporte, pw / 2, y, { align: 'center' });
+        y += 10;
+
+        // Función helper para agregar campo
+        const addField = (label, value) => {
+            if (y > ph - 30) { pdf.addPage(); y = margin; }
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'bold');
+            pdf.text(label + ':', margin, y);
+            pdf.setFont(undefined, 'normal');
+            pdf.text(String(value || '-'), margin + 45, y);
+            y += 6;
+        };
+
+        // Función helper para texto largo
+        const addLongText = (label, value) => {
+            if (!value) return;
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'bold');
+            pdf.text(label + ':', margin, y);
+            y += 5;
+            pdf.setFont(undefined, 'normal');
+            const lines = pdf.splitTextToSize(String(value), pw - margin * 2 - 5);
+            lines.forEach(line => {
+                if (y > ph - 25) { pdf.addPage(); y = margin; }
+                pdf.text(line, margin + 5, y);
+                y += 4.5;
+            });
+            y += 3;
+        };
+
+        // Datos del reporte
+        addField('Fecha', data.fecha);
+        addField('Hora Inicio', data.horaInicio);
+        addField('Hora Final', data.horaFinal);
+        addField('Equipo', `${data.equipoCodigo || ''} - ${data.equipoNombre || ''}`);
+        if (data.tipo) addField('Tipo', data.tipo);
+        addField('Tecnico', data.tecnicoNombre);
+
+        y += 3;
+        addLongText('Repuestos Utilizados', data.repuestos);
+        addLongText('Actividades Realizadas', data.actividadesRealizadas);
+        addLongText('Observaciones', data.observaciones);
+
+        // Evidencia fotográfica
+        if (data.evidencias && data.evidencias.length > 0) {
+            if (y > ph - 80) { pdf.addPage(); y = margin; }
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Evidencia Fotografica:', margin, y);
+            y += 6;
+
+            const imgW = 80, imgH = 60;
+            let col = margin;
+            data.evidencias.forEach((img, i) => {
+                if (y + imgH > ph - 20) { pdf.addPage(); y = margin; col = margin; }
+                try {
+                    pdf.addImage(img, 'JPEG', col, y, imgW, imgH);
+                    pdf.setDrawColor(200, 200, 200);
+                    pdf.rect(col, y, imgW, imgH);
+                } catch(e) {}
+                col += imgW + 8;
+                if (col + imgW > pw - margin) { col = margin; y += imgH + 5; }
+            });
+            y += imgH + 8;
+        }
+
+        // Firma
+        if (data.firma) {
+            if (y > ph - 50) { pdf.addPage(); y = margin; }
+            y += 10;
+            pdf.setFontSize(9);
+            pdf.setFont(undefined, 'bold');
+            pdf.text('Firma del Tecnico:', margin, y);
+            y += 5;
+            try {
+                pdf.addImage(data.firma, 'PNG', margin, y, 60, 25);
+            } catch(e) {}
+            y += 28;
+            pdf.setDrawColor(0, 0, 0);
+            pdf.setLineWidth(0.3);
+            pdf.line(margin, y, margin + 60, y);
+            y += 4;
+            pdf.setFont(undefined, 'normal');
+            pdf.setFontSize(8);
+            pdf.text(data.tecnicoNombre || 'Tecnico', margin, y);
+        }
+
+        // Pie de página
+        const pageCount = pdf.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            pdf.setPage(i);
+            pdf.setFontSize(7);
+            pdf.setTextColor(150, 150, 150);
+            pdf.text(`Generado por ${APP_CONFIG.nombreEmpresa} - ${new Date().toLocaleString('es-CO')}`, pw / 2, ph - 8, { align: 'center' });
+            pdf.text(`Pagina ${i} de ${pageCount}`, pw - margin, ph - 8, { align: 'right' });
+            pdf.setTextColor(0, 0, 0);
+        }
+
+        // Descargar
+        const fileName = `${titulo.replace(/ /g, '_')}_${numReporte.replace(/ /g, '')}_${data.fecha || 'sin_fecha'}.pdf`;
+        pdf.save(fileName);
+        View.toast('PDF generado correctamente');
+    }
+};
+
+// ============================================
+// INICIALIZAR LA APLICACIÓN
+// ============================================
+// Hacer Controller accesible globalmente para los onclick del HTML
+window.Controller = Controller;
+
+// Esperar a que el DOM esté listo
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => Controller.init());
+} else {
+    Controller.init();
+}

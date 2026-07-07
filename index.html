@@ -410,6 +410,7 @@
         <div class="tabs" role="tablist" aria-label="Pestañas de configuración">
           <button class="tab is-active" role="tab" aria-selected="true" data-tab="config-logo">Logo de la empresa</button>
           <button class="tab" role="tab" aria-selected="false" data-tab="config-tecnicos">Técnicos</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="config-usuarios">Usuarios</button>
         </div>
 
         <!-- Sub-pestaña: Logo -->
@@ -461,6 +462,42 @@
             <div class="table-empty" id="tecnicos-empty" hidden>
               <i data-lucide="users"></i>
               <p>No hay técnicos registrados todavía.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sub-pestaña: Usuarios (cuentas de acceso + rol) -->
+        <div class="tab-panel" id="tab-config-usuarios" role="tabpanel" hidden>
+          <p class="hint-text">Administra quién puede entrar al sistema y con qué rol (Administrador o Técnico).</p>
+
+          <div class="toolbar">
+            <div class="toolbar-search">
+              <i data-lucide="search"></i>
+              <input type="search" id="usuarios-search" placeholder="Buscar usuario por nombre o correo…">
+            </div>
+            <div class="toolbar-actions">
+              <button class="btn btn-primary" id="btn-add-usuario">
+                <i data-lucide="user-plus"></i> Crear usuario
+              </button>
+            </div>
+          </div>
+
+          <div class="table-wrapper">
+            <table class="data-table" id="usuarios-table">
+              <thead>
+                <tr>
+                  <th>Nombre</th>
+                  <th>Correo</th>
+                  <th>Rol</th>
+                  <th>Estado</th>
+                  <th class="col-actions">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="usuarios-tbody"></tbody>
+            </table>
+            <div class="table-empty" id="usuarios-empty" hidden>
+              <i data-lucide="user-plus"></i>
+              <p>No hay usuarios registrados todavía.</p>
             </div>
           </div>
         </div>
@@ -691,6 +728,51 @@
       <button class="btn btn-ghost" data-close-modal="modal-tecnico">Cancelar</button>
       <button class="btn btn-primary" type="submit" form="form-tecnico">
         <i data-lucide="save"></i> Guardar técnico
+      </button>
+    </footer>
+  </div>
+</div>
+
+<!-- Modal: Usuario (cuenta de acceso + rol) -->
+<div class="modal-overlay" id="modal-usuario" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-usuario-title">
+    <header class="modal-header">
+      <h3 id="modal-usuario-title">Crear usuario</h3>
+      <button class="icon-btn" data-close-modal="modal-usuario" aria-label="Cerrar"><i data-lucide="x"></i></button>
+    </header>
+    <form id="form-usuario" class="modal-body" novalidate>
+      <input type="hidden" id="usuario-doc-id">
+      <div class="field">
+        <label for="usuario-nombre">Nombre *</label>
+        <input type="text" id="usuario-nombre" name="nombre" required placeholder="Nombre completo">
+      </div>
+      <div class="field">
+        <label for="usuario-correo">Correo *</label>
+        <input type="email" id="usuario-correo" name="correo" required placeholder="nombre@lleser.com">
+      </div>
+      <div class="field" id="usuario-password-field">
+        <label for="usuario-password">Contraseña *</label>
+        <input type="password" id="usuario-password" name="password" autocomplete="new-password" placeholder="Mínimo 6 caracteres">
+      </div>
+      <div class="field">
+        <label for="usuario-rol">Rol *</label>
+        <select id="usuario-rol" name="rol" required>
+          <option value="tecnico">Técnico</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="usuario-activo">Estado</label>
+        <select id="usuario-activo" name="activo">
+          <option value="true">Activo</option>
+          <option value="false">Inactivo</option>
+        </select>
+      </div>
+    </form>
+    <footer class="modal-footer">
+      <button class="btn btn-ghost" data-close-modal="modal-usuario">Cancelar</button>
+      <button class="btn btn-primary" type="submit" form="form-usuario">
+        <i data-lucide="save"></i> Guardar usuario
       </button>
     </footer>
   </div>

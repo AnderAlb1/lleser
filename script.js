@@ -828,9 +828,16 @@ const Controller = {
                 document.getElementById('app-screen').style.display = 'none';
                 document.getElementById('login-screen').style.display = 'flex';
 
-                // Verificar si hay usuarios registrados
-                const hasUsers = await Model.tieneUsuariosRegistrados();
-                document.getElementById('register-link').classList.toggle('hidden', hasUsers);
+                // Verificar si hay usuarios registrados// Mostrar registro por defecto, ocultar solo si hay usuarios
+                document.getElementById('register-link').classList.remove('hidden');
+                try {
+                    const hasUsers = await Model.tieneUsuariosRegistrados();
+                    if (hasUsers) {
+                        document.getElementById('register-link').classList.add('hidden');
+                    }
+                } catch (err) {
+                    console.warn('No se pudo verificar usuarios:', err);
+                }
             }
         });
 
@@ -941,34 +948,59 @@ const Controller = {
 
     async handleLogin(e) {
         e.preventDefault();
-        const email = document.getElementById('login-email').value;
+        e.stopPropagation();
+    
+        const email = document.getElementById('login-email').value.trim();
         const password = document.getElementById('login-password').value;
         const errorEl = document.getElementById('login-error');
+        const btnLogin = document.getElementById('btn-login');
         errorEl.classList.add('hidden');
-
+    
+        if (!email || !password) {
+            errorEl.textContent = 'Ingresa correo y contraseña';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+    
+        btnLogin.disabled = true;
+        btnLogin.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ingresando...';
+    
         try {
             await auth.signInWithEmailAndPassword(email, password);
+            // onAuthStateChanged se encarga del resto
         } catch (err) {
+            console.error('Error login:', err.code, err.message);
             errorEl.textContent = this.getAuthErrorMessage(err.code);
             errorEl.classList.remove('hidden');
+            btnLogin.disabled = false;
+            btnLogin.innerHTML = '<i class="fas fa-sign-in-alt"></i> Ingresar';
         }
     },
 
     async handleRegister(e) {
         e.preventDefault();
+        e.stopPropagation();
+    
         const name = document.getElementById('reg-name').value.trim();
         const email = document.getElementById('reg-email').value.trim();
         const password = document.getElementById('reg-password').value;
         const errorEl = document.getElementById('register-error');
         errorEl.classList.add('hidden');
-
+    
+        if (!name || !email || !password) {
+            errorEl.textContent = 'Todos los campos son obligatorios';
+            errorEl.classList.remove('hidden');
+            return;
+        }
+    
         try {
             const cred = await auth.createUserWithEmailAndPassword(email, password);
-            // Determinar rol: primer usuario = admin
             const hasUsers = await Model.tieneUsuariosRegistrados();
             const rol = hasUsers ? 'tecnico' : 'admin';
             await Model.crearUsuarioEnDB(cred.user.uid, { nombre: name, email, rol });
+            // onAuthStateChanged se encarga del resto
         } catch (err) {
+            console.error('Error registro:', err.code, err.message);
             errorEl.textContent = this.getAuthErrorMessage(err.code);
             errorEl.classList.remove('hidden');
         }

@@ -1,19 +1,33 @@
 /**
  * ============================================
  * LleSer Ltda. - Sistema de Gestión de Mantenimientos
- * Arquitectura MVC - Script Principal
  * ============================================
  */
 
 // ============================================
-// INICIALIZACIÓN FIREBASE
+// INICIALIZACIÓN FIREBASE CON MANEJO DE ERRORES
 // ============================================
-firebase.initializeApp(FIREBASE_CONFIG);
-const auth = firebase.auth();
-const db = firebase.firestore();
+let db, auth;
 
-// Habilitar persistencia offline para mejor rendimiento
-db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+try {
+    firebase.initializeApp(FIREBASE_CONFIG);
+    auth = firebase.auth();
+    db = firebase.firestore();
+    db.enablePersistence({ synchronizeTabs: true }).catch(function() {});
+    console.log('Firebase inicializado correctamente');
+} catch (error) {
+    console.error('ERROR CRÍTICO: Firebase no se pudo inicializar:', error);
+    document.getElementById('login-screen').innerHTML = `
+        <div style="background:#FFF;padding:40px;border-radius:16px;max-width:500px;text-align:center;box-shadow:0 20px 50px rgba(0,0,0,0.2);">
+            <i class="fas fa-exclamation-triangle" style="font-size:3rem;color:var(--danger);margin-bottom:16px;"></i>
+            <h2 style="margin-bottom:12px;color:var(--danger);">Error de configuración</h2>
+            <p style="color:var(--text-secondary);margin-bottom:16px;">El archivo <strong>config.js</strong> no contiene las credenciales válidas de Firebase.</p>
+            <p style="color:var(--text-muted);font-size:0.85rem;">Abre config.js y reemplaza los valores placeholder con los datos reales de tu proyecto en Firebase Console > Project Settings > General > Your apps > Web app.</p>
+            <p style="color:var(--text-muted);font-size:0.82rem;margin-top:12px;">Error: ${error.message}</p>
+        </div>
+    `;
+    throw error; // Detener ejecución
+}
 
 // ============================================
 // ESTADO GLOBAL DE LA APLICACIÓN
@@ -22,16 +36,12 @@ const AppState = {
     currentUser: null,
     userRole: null,
     currentModule: 'equipos-gestion',
-    // Paginación
     equipos: { lastDoc: null, data: [], loading: false, hasMore: true, count: 0 },
     ordenes: { lastDoc: null, data: [], loading: false, hasMore: true, count: 0 },
-    // Fotos temporales para formularios
     tempPhotos: { ro: [], rc: [] },
-    // Reporte guardado recientemente (para generar PDF)
     lastSavedReport: null,
     lastSavedCorrectivo: null,
-    // Firma temporal
-    firmaData: { ro: null, rc: null }
+    firmaData: { ro: null, rc: null, tc: null }
 };
 
 // ============================================

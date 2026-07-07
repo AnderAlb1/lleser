@@ -12,13 +12,14 @@
  * 6. Pega los valores aquí
  */
 
+
 const FIREBASE_CONFIG = {
-    apiKey: "TU_API_KEY_AQUI",
-    authDomain: "TU_PROYECTO.firebaseapp.com",
-    projectId: "TU_PROYECTO_ID",
-    storageBucket: "TU_PROYECTO.appspot.com",
-    messagingSenderId: "TU_SENDER_ID",
-    appId: "TU_APP_ID"
+  apiKey: "AIzaSyCWdkmnT5CmQJTlSsB3rsP04mViiFDFusQ",
+  authDomain: "lleser.firebaseapp.com",
+  projectId: "lleser",
+  storageBucket: "lleser.firebasestorage.app",
+  messagingSenderId: "112125305944",
+  appId: "1:112125305944:web:0d1cfbb93e863412d3562d"
 };
 
 /* ============================================

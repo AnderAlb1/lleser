@@ -2,53 +2,23 @@
    LleSer Ltda. — Sistema de gestión de mantenimientos
    script.js  (Parte 1 de varias)
    ----------------------------------------------------------------------------
+   Usa el SDK "compat" de Firebase. Las variables auth, db, storage,
+   COLLECTIONS, ROLES, onAuthChange, login, logout, getUserProfile y
+   createUserWithRole vienen de config.js (se carga antes que este archivo
+   en index.html y comparten el mismo ámbito global del documento).
+
    Contenido de esta parte:
-     0. Imports y helpers genéricos (DOM, toasts, modales, tabs)
+     0. Helpers genéricos (DOM, toasts, modales, tabs)
      1. Sidebar / topbar / navegación entre módulos
      2. Autenticación (login, logout, estado de sesión, roles)
-     3. Módulo de Configuración:
-          3.1 Logo de la empresa
-          3.2 Técnicos (con firma en canvas)
-          3.3 Usuarios (crear cuentas y asignar rol)
+     3. Módulo de Configuración: Logo, Técnicos (firma), Usuarios (roles)
 
-   Lo que falta para partes siguientes: Equipos, Órdenes de trabajo,
-   Reportes de OT, Reportes correctivos, generación de PDF, importación
-   de Excel, buscador global y paginación de tablas grandes.
+   Falta para partes siguientes: Equipos, Órdenes de trabajo, Reportes de
+   OT, Reportes correctivos, generación de PDF, importación de Excel,
+   buscador global y paginación de tablas grandes.
    ============================================================================ */
 
-import {
-  auth,
-  db,
-  storage,
-  COLLECTIONS,
-  ROLES,
-  onAuthChange,
-  login,
-  logout,
-  getUserProfile,
-  createUserWithRole,
-} from "./config.js";
-
-import {
-  collection,
-  doc,
-  addDoc,
-  updateDoc,
-  setDoc,
-  getDoc,
-  deleteDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  serverTimestamp,
-} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore.js";
-
-import {
-  ref as storageRef,
-  uploadBytes,
-  getDownloadURL,
-  deleteObject,
-} from "https://www.gstatic.com/firebasejs/12.15.0/firebase-storage.js";
+console.log("[LleSer] script.js cargado, esperando estado de autenticación…");
 
 /* ============================================================================
    0. HELPERS GENÉRICOS
@@ -57,12 +27,10 @@ import {
 const $ = (selector, scope = document) => scope.querySelector(selector);
 const $$ = (selector, scope = document) => Array.from(scope.querySelectorAll(selector));
 
-/** Vuelve a dibujar los íconos Lucide agregados dinámicamente al DOM. */
 function refreshIcons() {
   if (window.lucide) window.lucide.createIcons();
 }
 
-/** Guarda en qué módulo estaba el usuario, para restaurarlo si recarga la página. */
 const LAST_MODULE_KEY = "lleser_current_module";
 
 /* ---------------- Toasts ---------------- */
@@ -89,18 +57,15 @@ function closeModal(id) {
   const modal = document.getElementById(id);
   if (modal) modal.hidden = true;
 }
-// Cualquier botón con [data-close-modal="id"] cierra ese modal.
 $$("[data-close-modal]").forEach((btn) => {
   btn.addEventListener("click", () => closeModal(btn.dataset.closeModal));
 });
-// Clic en el fondo oscuro también cierra el modal.
 $$(".modal-overlay").forEach((overlay) => {
   overlay.addEventListener("click", (e) => {
     if (e.target === overlay) overlay.hidden = true;
   });
 });
 
-/** Modal de confirmación reutilizable (eliminar, desactivar, etc.). */
 let pendingConfirmAction = null;
 function openConfirm(message, onConfirm, { title = "¿Confirmar acción?", confirmLabel = "Eliminar" } = {}) {
   $("#modal-confirm-title").textContent = title;
@@ -117,7 +82,7 @@ $("#btn-confirm-action").addEventListener("click", async () => {
   closeModal("modal-confirm");
 });
 
-/* ---------------- Tabs genéricas (Equipos, Configuración, etc.) ---------------- */
+/* ---------------- Tabs genéricas ---------------- */
 function initTabs() {
   $$(".tabs").forEach((tabsEl) => {
     const section = tabsEl.closest("section") || document;
@@ -158,13 +123,11 @@ $("#hamburger-btn").addEventListener("click", openSidebar);
 $("#sidebar-close").addEventListener("click", closeSidebar);
 $("#sidebar-overlay").addEventListener("click", closeSidebar);
 
-/** Cambia el módulo visible, actualiza el título del topbar y lo recuerda. */
 function goToModule(moduleName) {
   const targetNav = $(`.nav-item[data-module="${moduleName}"]`);
   const targetView = $(`#module-${moduleName}`);
   if (!targetNav || !targetView) return;
 
-  // No permitir navegar a un módulo oculto por rol (por si alguien fuerza el hash/localStorage).
   const li = targetNav.closest("li");
   if (li && li.hidden) return;
 
@@ -184,10 +147,9 @@ $$(".nav-item").forEach((btn) => {
    2. AUTENTICACIÓN
    ============================================================================ */
 
-let currentUser = null;   // objeto de Firebase Auth
-let currentProfile = null; // { id, nombre, correo, rol, activo } desde Firestore
+let currentUser = null;
+let currentProfile = null;
 
-/** Aplica visibilidad de módulos del sidebar según el rol del usuario. */
 function applyRoleVisibility(rol) {
   $$("[data-role-visibility]").forEach((el) => {
     const allowed = el.dataset.roleVisibility.split(",").map((r) => r.trim());
@@ -215,15 +177,11 @@ async function showApp() {
   applyRoleVisibility(currentProfile.rol);
   fillSidebarUser(currentProfile);
 
-  // Restaurar el módulo donde estaba el usuario antes de recargar la página,
-  // siempre que su rol todavía tenga acceso a ese módulo.
   const savedModule = localStorage.getItem(LAST_MODULE_KEY);
   const savedNav = savedModule && $(`.nav-item[data-module="${savedModule}"]`);
   const savedAllowed = savedNav && !savedNav.closest("li").hidden;
   goToModule(savedAllowed ? savedModule : "dashboard");
 
-  // Iniciar listeners de datos del módulo de Configuración solo si es admin
-  // y solo una vez por sesión.
   if (currentProfile.rol === ROLES.ADMIN) {
     initConfiguracionModule();
   }
@@ -236,6 +194,7 @@ function showLogin() {
 }
 
 onAuthChange(async (user) => {
+  console.log("[LleSer] onAuthChange disparado. Usuario:", user);
   currentUser = user;
 
   if (!user) {
@@ -245,9 +204,10 @@ onAuthChange(async (user) => {
   }
 
   try {
+    console.log("[LleSer] Buscando perfil en Firestore para uid:", user.uid);
     const profile = await getUserProfile(user.uid);
+    console.log("[LleSer] Perfil obtenido:", profile);
     if (!profile) {
-      // El usuario existe en Authentication pero no tiene documento de perfil/rol.
       showToast("Tu cuenta no tiene un rol asignado. Contacta a un administrador.", "error");
       await logout();
       return;
@@ -291,7 +251,6 @@ $("#login-form").addEventListener("submit", async (e) => {
 
   try {
     await login(email, password);
-    // onAuthChange se encarga de mostrar la app.
   } catch (err) {
     errorBox.textContent = LOGIN_ERROR_MESSAGES[err.code] || "No se pudo iniciar sesión. Intenta de nuevo.";
     errorBox.hidden = false;
@@ -323,7 +282,7 @@ $("#logout-btn").addEventListener("click", async () => {
 let configuracionInitialized = false;
 
 function initConfiguracionModule() {
-  if (configuracionInitialized) return; // evitar duplicar listeners de Firestore
+  if (configuracionInitialized) return;
   configuracionInitialized = true;
 
   initLogoTab();
@@ -333,9 +292,7 @@ function initConfiguracionModule() {
 
 /* ----------------------------------------------------------------------
    3.1 LOGO DE LA EMPRESA
-   Se guarda en Storage (configuracion/logo.<ext>) y la URL en el documento
-   Firestore configuracion/general → { logoUrl }. Ese mismo documento es el
-   que se leerá más adelante desde la generación de PDF para incluir el logo.
+   Storage: configuracion/logo.<ext> — Firestore: configuracion/general.logoUrl
 ---------------------------------------------------------------------- */
 const CONFIG_DOC_ID = "general";
 
@@ -344,8 +301,8 @@ function initLogoTab() {
   const fileInput = $("#logo-file-input");
 
   async function loadLogo() {
-    const snap = await getDoc(doc(db, COLLECTIONS.CONFIGURACION, CONFIG_DOC_ID));
-    const logoUrl = snap.exists() ? snap.data().logoUrl : null;
+    const snap = await db.collection(COLLECTIONS.CONFIGURACION).doc(CONFIG_DOC_ID).get();
+    const logoUrl = snap.exists ? snap.data().logoUrl : null;
     renderLogoPreview(logoUrl);
   }
 
@@ -371,11 +328,11 @@ function initLogoTab() {
 
     try {
       const ext = file.name.split(".").pop();
-      const ref = storageRef(storage, `configuracion/logo.${ext}`);
-      await uploadBytes(ref, file);
-      const url = await getDownloadURL(ref);
+      const ref = storage.ref(`configuracion/logo.${ext}`);
+      await ref.put(file);
+      const url = await ref.getDownloadURL();
 
-      await setDoc(doc(db, COLLECTIONS.CONFIGURACION, CONFIG_DOC_ID), { logoUrl: url }, { merge: true });
+      await db.collection(COLLECTIONS.CONFIGURACION).doc(CONFIG_DOC_ID).set({ logoUrl: url }, { merge: true });
       renderLogoPreview(url);
       showToast("Logo actualizado correctamente.", "success");
     } catch (err) {
@@ -391,14 +348,13 @@ function initLogoTab() {
       "¿Quitar el logo de la empresa? Los próximos reportes en PDF se generarán sin logo.",
       async () => {
         try {
-          const snap = await getDoc(doc(db, COLLECTIONS.CONFIGURACION, CONFIG_DOC_ID));
-          const logoUrl = snap.exists() ? snap.data().logoUrl : null;
+          const snap = await db.collection(COLLECTIONS.CONFIGURACION).doc(CONFIG_DOC_ID).get();
+          const logoUrl = snap.exists ? snap.data().logoUrl : null;
           if (logoUrl) {
-            // Intentamos borrar el archivo de Storage; si ya no existe, seguimos igual.
             const path = decodeURIComponent(new URL(logoUrl).pathname.split("/o/")[1].split("?")[0]);
-            await deleteObject(storageRef(storage, path)).catch(() => {});
+            await storage.ref(path).delete().catch(() => {});
           }
-          await setDoc(doc(db, COLLECTIONS.CONFIGURACION, CONFIG_DOC_ID), { logoUrl: null }, { merge: true });
+          await db.collection(COLLECTIONS.CONFIGURACION).doc(CONFIG_DOC_ID).set({ logoUrl: null }, { merge: true });
           renderLogoPreview(null);
           showToast("Logo eliminado.", "success");
         } catch (err) {
@@ -414,21 +370,17 @@ function initLogoTab() {
 }
 
 /* ----------------------------------------------------------------------
-   3.2 TÉCNICOS (ficha: nombre, cargo, firma)
-   La firma se captura en un <canvas> y se guarda como Data URL (base64)
-   directamente en el documento de Firestore. Es un dato pequeño (una
-   firma simple no pasa de unos pocos KB) así que no requiere Storage.
+   3.2 TÉCNICOS (ficha: nombre, cargo, firma en canvas → dataURL)
 ---------------------------------------------------------------------- */
 let tecnicosCache = [];
-let signaturePad = null; // { canvas, ctx, drawing, hasStroke }
+let signaturePad = null;
 
 function initTecnicosTab() {
   const tbody = $("#tecnicos-tbody");
   const empty = $("#tecnicos-empty");
   const search = $("#tecnicos-search");
 
-  const q = query(collection(db, COLLECTIONS.TECNICOS), orderBy("nombre"));
-  onSnapshot(q, (snap) => {
+  db.collection(COLLECTIONS.TECNICOS).orderBy("nombre").onSnapshot((snap) => {
     tecnicosCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderTecnicos(search.value);
   });
@@ -471,7 +423,7 @@ function initTecnicosTab() {
     if (btn.dataset.action === "edit") openTecnicoModal(tecnico);
     if (btn.dataset.action === "delete") {
       openConfirm(`¿Eliminar al técnico "${tecnico.nombre}"? Esta acción no se puede deshacer.`, async () => {
-        await deleteDoc(doc(db, COLLECTIONS.TECNICOS, tecnico.id));
+        await db.collection(COLLECTIONS.TECNICOS).doc(tecnico.id).delete();
         showToast("Técnico eliminado.", "success");
       });
     }
@@ -497,19 +449,18 @@ function initTecnicosTab() {
     }
 
     const data = { nombre, cargo };
-    // Si el usuario no volvió a firmar al editar, conservamos la firma anterior.
     if (signaturePad.hasStroke) {
       data.firmaDataUrl = signaturePad.canvas.toDataURL("image/png");
     }
 
     try {
       if (id) {
-        await updateDoc(doc(db, COLLECTIONS.TECNICOS, id), data);
+        await db.collection(COLLECTIONS.TECNICOS).doc(id).update(data);
         showToast("Técnico actualizado.", "success");
       } else {
         data.firmaDataUrl = data.firmaDataUrl || null;
-        data.creadoEn = serverTimestamp();
-        await addDoc(collection(db, COLLECTIONS.TECNICOS), data);
+        data.creadoEn = firebase.firestore.FieldValue.serverTimestamp();
+        await db.collection(COLLECTIONS.TECNICOS).add(data);
         showToast("Técnico agregado.", "success");
       }
       closeModal("modal-tecnico");
@@ -530,13 +481,12 @@ function openTecnicoModal(tecnico) {
   clearSignaturePad();
   if (tecnico?.firmaDataUrl) {
     drawImageOnSignaturePad(tecnico.firmaDataUrl);
-    signaturePad.hasStroke = false; // no se re-sube a menos que el usuario dibuje encima
+    signaturePad.hasStroke = false;
   }
 
   openModal("modal-tecnico");
 }
 
-/** Pad de firma: dibujo simple con mouse y con touch (para tablets/celulares). */
 function initSignaturePad() {
   const canvas = $("#tecnico-firma-canvas");
   const ctx = canvas.getContext("2d");
@@ -598,12 +548,7 @@ function drawImageOnSignaturePad(dataUrl) {
 }
 
 /* ----------------------------------------------------------------------
-   3.3 USUARIOS (cuentas de acceso + rol)
-   Solo visible/usable por administradores. Crear usuario usa
-   createUserWithRole() de config.js (Authentication + Firestore).
-   Editar usuario solo actualiza nombre/rol/estado en Firestore: el correo
-   y la contraseña de Authentication no se pueden cambiar desde aquí sin
-   una Cloud Function con el Admin SDK.
+   3.3 USUARIOS (cuentas de acceso + rol) — solo administradores
 ---------------------------------------------------------------------- */
 let usuariosCache = [];
 
@@ -612,8 +557,7 @@ function initUsuariosTab() {
   const empty = $("#usuarios-empty");
   const search = $("#usuarios-search");
 
-  const q = query(collection(db, COLLECTIONS.USUARIOS), orderBy("nombre"));
-  onSnapshot(q, (snap) => {
+  db.collection(COLLECTIONS.USUARIOS).orderBy("nombre").onSnapshot((snap) => {
     usuariosCache = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderUsuarios(search.value);
   });
@@ -673,7 +617,6 @@ function initUsuariosTab() {
 
     try {
       if (id) {
-        // Edición: solo nombre, rol y estado (correo/contraseña no se tocan aquí).
         if (id === currentUser.uid && !activo) {
           showToast("No puedes desactivar tu propia cuenta.", "error");
           return;
@@ -682,7 +625,7 @@ function initUsuariosTab() {
           showToast("No puedes quitarte a ti mismo el rol de administrador.", "error");
           return;
         }
-        await updateDoc(doc(db, COLLECTIONS.USUARIOS, id), { nombre, rol, activo });
+        await db.collection(COLLECTIONS.USUARIOS).doc(id).update({ nombre, rol, activo });
         showToast("Usuario actualizado.", "success");
       } else {
         if (!password || password.length < 6) {
@@ -711,7 +654,6 @@ function openUsuarioModal(usuario) {
   $("#usuario-rol").value = usuario?.rol || ROLES.TECNICO;
   $("#usuario-activo").value = usuario?.activo === false ? "false" : "true";
 
-  // El correo y la contraseña solo se piden al crear la cuenta.
   $("#usuario-correo").disabled = Boolean(usuario);
   $("#usuario-password-field").hidden = Boolean(usuario);
   $("#usuario-password").required = !usuario;

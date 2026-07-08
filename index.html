@@ -24,14 +24,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 
-<!-- Firebase (SDK modular v10, vía CDN) -->
-<script type="module">
-  // Los SDK de Firebase se inicializan en config.js. Este bloque solo
-  // deja constancia de la versión usada para mantener consistencia
-  // en las importaciones dentro de config.js y script.js.
-  // https://www.gstatic.com/firebasejs/10.x/firebase-app.js
-</script>
-
+<!-- Firebase se carga al final del <body> con el SDK "compat" (firebase-*-compat.js),
+     antes de config.js y script.js. Ver esa sección para los <script> correspondientes. -->
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -802,8 +796,14 @@
 <!-- ============================================================
      SCRIPTS DE LA APLICACIÓN (módulos ES)
      ============================================================ -->
-<script type="module" src="config.js"></script>
-<script type="module" src="script.js"></script>
+<!-- Firebase (SDK "compat" — API clásica firebase.*, sin módulos ES) -->
+<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/12.15.0/firebase-storage-compat.js"></script>
+
+<script src="config.js"></script>
+<script src="script.js"></script>
 
 </body>
 </html>

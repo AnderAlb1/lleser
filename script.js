@@ -10,8 +10,6 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
 
-// Habilitar persistencia offline para mejor rendimiento
-db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
 
 // ============================================
 // UTILIDADES
@@ -95,6 +93,7 @@ const Utils = {
 // ============================================
 // MODELO - Capa de acceso a datos (Firebase)
 // ============================================
+
 const Model = {
     // --- EQUIPOS ---
     async equipoCreate(data) {
@@ -107,7 +106,7 @@ const Model = {
         return await db.collection('equipment').doc(id).delete();
     },
     async equipoGetAll() {
-        const snap = await db.collection('equipment').orderBy('createdAt','desc').get();
+        const snap = await db.collection('equipment').orderBy('createdAt','desc').get({ source: 'server' });
         return snap.docs.map(d => ({id: d.id, ...d.data()}));
     },
     async equipoGetById(id) {
@@ -148,14 +147,14 @@ const Model = {
     async ordenGetAll(limit = 15, startAfter = null) {
         let q = db.collection('workOrders').orderBy('numero','desc').limit(limit);
         if (startAfter) q = q.startAfter(startAfter);
-        const snap = await q.get();
+        const snap = await q.get({ source: 'server' });
         return {
             data: snap.docs.map(d => ({id: d.id, ...d.data()})),
             lastDoc: snap.docs[snap.docs.length - 1] || null
         };
     },
     async ordenGetAllNoPag() {
-        const snap = await db.collection('workOrders').orderBy('numero','desc').get();
+        const snap = await db.collection('workOrders').orderBy('numero','desc').get({ source: 'server' });
         return snap.docs.map(d => ({id: d.id, ...d.data()}));
     },
     async ordenCount() {
@@ -176,9 +175,11 @@ const Model = {
     async reporteGetByEquipo(equipoId) {
         const snap = await db.collection('reports')
             .where('equipoId','==',equipoId)
-            .orderBy('createdAt','desc')
-            .get();
-        return snap.docs.map(d => ({id: d.id, ...d.data()}));
+            .get({ source: 'server' });
+        return snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a, b) => {
+            if (a.createdAt && b.createdAt) return b.createdAt.toMillis() - a.createdAt.toMillis();
+            return 0;
+        });
     },
     async reporteGetById(id) {
         const doc = await db.collection('reports').doc(id).get();
@@ -191,7 +192,7 @@ const Model = {
     async reporteGetAllCorrectivos(limit = 15, startAfter = null) {
         let q = db.collection('reports').where('tipo','==','correctivo').orderBy('createdAt','desc').limit(limit);
         if (startAfter) q = q.startAfter(startAfter);
-        const snap = await q.get();
+        const snap = await q.get({ source: 'server' });
         return {
             data: snap.docs.map(d => ({id: d.id, ...d.data()})),
             lastDoc: snap.docs[snap.docs.length - 1] || null
@@ -209,7 +210,7 @@ const Model = {
         return await db.collection('technicians').doc(id).delete();
     },
     async tecnicoGetAll() {
-        const snap = await db.collection('technicians').orderBy('nombre','asc').get();
+        const snap = await db.collection('technicians').orderBy('nombre','asc').get({ source: 'server' });
         return snap.docs.map(d => ({id: d.id, ...d.data()}));
     },
     async tecnicoGetById(id) {
@@ -236,7 +237,7 @@ const Model = {
         return doc.exists ? {id: doc.id, ...doc.data()} : null;
     },
     async userDocGetAll() {
-        const snap = await db.collection('users').orderBy('nombre','asc').get();
+        const snap = await db.collection('users').orderBy('nombre','asc').get({ source: 'server' });
         return snap.docs.map(d => ({id: d.id, ...d.data()}));
     },
 
@@ -252,12 +253,11 @@ const Model = {
         return await db.collection('config').doc('logo').delete();
     },
 
-    // --- BÚSQUEDA POR NÚMERO DE ORDEN ---
+    // --- BÚSQUEDA ---
     async buscarEquipoPorOrden(num) {
         const snap = await db.collection('workOrders').where('numero','==',num).limit(1).get();
         if (!snap.empty) {
-            const ord = snap.docs[0].data();
-            return ord.equipoId;
+            return snap.docs[0].data().equipoId;
         }
         return null;
     }
@@ -284,19 +284,40 @@ const View = {
     },
 
     // Modal de confirmación
-    confirm(message) {
+        confirm(message, btnText = 'Eliminar') {
         return new Promise((resolve) => {
+            const btnOk = document.getElementById('confirmOk');
+            const btnCancel = document.getElementById('confirmCancel');
+            
+            // 1. Actualizar texto y color del botón principal
             document.getElementById('confirmMessage').textContent = message;
+            btnOk.textContent = btnText;
+            
+            if (btnText === 'Activar') {
+                btnOk.className = 'btn btn-success'; // Verde para activar
+            } else {
+                btnOk.className = 'btn btn-danger';  // Rojo para eliminar/desactivar
+            }
+
+            // 2. Mostrar modal
             App.openModal('modalConfirm');
-            const okBtn = document.getElementById('confirmOk');
-            const cancelBtn = document.getElementById('confirmCancel');
+
+            // 3. Manejar clics sin clonar nodos
+            const handleOk = () => { cleanup(); resolve(true); };
+            const handleCancel = () => { cleanup(); resolve(false); };
+            
             const cleanup = () => {
-                okBtn.replaceWith(okBtn.cloneNode(true));
-                cancelBtn.replaceWith(cancelBtn.cloneNode(true));
+                btnOk.removeEventListener('click', handleOk);
+                btnCancel.removeEventListener('click', handleCancel);
                 App.closeModal('modalConfirm');
+                
+                // 4. Restaurar el botón a su estado original por defecto
+                btnOk.textContent = 'Eliminar';
+                btnOk.className = 'btn btn-danger';
             };
-            document.getElementById('confirmOk').addEventListener('click', () => { cleanup(); resolve(true); });
-            document.getElementById('confirmCancel').addEventListener('click', () => { cleanup(); resolve(false); });
+
+            btnOk.addEventListener('click', handleOk);
+            btnCancel.addEventListener('click', handleCancel);
         });
     },
 
@@ -383,25 +404,27 @@ const View = {
         });
     },
 
-    // Renderizar órdenes de trabajo
-    renderOrdenes(ordenes) {
+        renderOrdenes(ordenes) {
         const tbody = document.getElementById('tbodyOrdenes');
         const empty = document.getElementById('ordenesEmpty');
-        if (ordenes.length === 0) { tbody.innerHTML = ''; this.show('ordenesEmpty'); return; }
-        this.hide('ordenesEmpty');
+        if (ordenes.length === 0) { tbody.innerHTML = ''; View.show('ordenesEmpty'); return; }
+        View.hide('ordenesEmpty');
         tbody.innerHTML = ordenes.map(o => {
             const tipoClass = o.tipo === 'Preventivo' ? 'info' : o.tipo === 'Correctivo' ? 'danger' : 'warning';
             const estadoClass = o.estado === 'completada' ? 'success' : 'warning';
+            const hasReport = o.reportId;
+            const btnAcciones = hasReport 
+                ? `<button class="btn btn-outline btn-sm" onclick="Controller.generarPDFDesdeOrden('${o.reportId}')"><i class="fas fa-file-pdf"></i> PDF</button>` 
+                : `<button class="btn-icon btn-outline" title="Editar" onclick="Controller.editOrden('${o.id}')"><i class="fas fa-pen"></i></button>
+                   <button class="btn-icon btn-outline" title="Eliminar" style="color:var(--danger);margin-left:4px;" onclick="Controller.deleteOrden('${o.id}')"><i class="fas fa-trash"></i></button>`;
             return `<tr>
                 <td><strong>#${o.numero}</strong></td>
                 <td>${Utils.esc(o.equipoNombre || '')}</td>
                 <td><span class="badge badge-${tipoClass}">${Utils.esc(o.tipo || '')}</span></td>
-                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${Utils.esc(o.actividades || '')}</td>
+                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${Utils.esc(o.actividades || '')}</td>
                 <td><span class="badge badge-${estadoClass}">${o.estado === 'completada' ? 'Completada' : 'Pendiente'}</span></td>
-                <td class="text-right">
-                    <button class="btn-icon btn-outline" title="Editar" onclick="Controller.editOrden('${o.id}')"><i class="fas fa-pen"></i></button>
-                    <button class="btn-icon btn-outline" title="Eliminar" style="color:var(--danger);margin-left:4px;" onclick="Controller.deleteOrden('${o.id}')"><i class="fas fa-trash"></i></button>
-                </td>
+                <td>${hasReport ? `<button class="btn btn-outline btn-sm" onclick="Controller.verReporte('${o.reportId}')"><i class="fas fa-eye"></i> Ver</button>` : '<span class="badge badge-warning">Pendiente</span>'}</td>
+                <td class="text-right">${btnAcciones}</td>
             </tr>`;
         }).join('');
     },
@@ -411,8 +434,11 @@ const View = {
         const tbody = document.getElementById('tbodyReportesOT');
         const empty = document.getElementById('reportesOTEmpty');
         if (ordenes.length === 0) { tbody.innerHTML = ''; this.show('reportesOTEmpty'); return; }
+                // FILTRAR SOLO PENDIENTES
+        const pendientes = ordenes.filter(o => o.estado !== 'completada');
+        if (pendientes.length === 0) { tbody.innerHTML = ''; this.show('reportesOTEmpty'); return; }
         this.hide('reportesOTEmpty');
-        tbody.innerHTML = ordenes.map(o => {
+        tbody.innerHTML = pendientes.map(o => {
             const tipoClass = o.tipo === 'Preventivo' ? 'info' : o.tipo === 'Correctivo' ? 'danger' : 'warning';
             const hasReport = o.reportId;
             return `<tr>
@@ -498,8 +524,8 @@ const View = {
             return;
         }
         container.innerHTML = reportes.map(r => {
-            const tipoLabel = r.tipo === 'orden' ? `OT #${r.ordenNumero || ''} - ${r.tipoOrden || ''}` : 'Mantenimiento Correctivo';
-            return `<div class="history-item" onclick="Controller.verReporte('${r.id}')">
+        const tipoLabel = r.ordenNumero ? `OT #${r.ordenNumero} - ${r.tipoOrden || 'Mantenimiento Correctivo'}` : 'Mantenimiento Correctivo';
+          return `<div class="history-item" onclick="Controller.verReporte('${r.id}')">
                 <div class="history-header">
                     <span class="history-title">${Utils.esc(tipoLabel)}</span>
                     <span class="badge badge-info">${Utils.formatDateShort(r.fecha)}</span>
@@ -548,22 +574,6 @@ const View = {
             <div class="stat-card"><div class="stat-icon orange"><i class="fas fa-clock"></i></div><div class="stat-info"><h4>${pendientes}</h4><p>Pendientes</p></div></div>
             <div class="stat-card"><div class="stat-icon green"><i class="fas fa-check-circle"></i></div><div class="stat-info"><h4>${completadas}</h4><p>Completadas</p></div></div>
         `;
-    },
-
-    // Dropdown de búsqueda de equipo
-    renderEquipoDropdown(equipos, inputId, dropdownId) {
-        const dropdown = document.getElementById(dropdownId);
-        const input = document.getElementById(inputId);
-        const term = input.value.toLowerCase().trim();
-        if (!term) { dropdown.classList.add('hidden'); return; }
-        const filtered = equipos.filter(e =>
-            (e.codigo||'').toLowerCase().includes(term) ||
-            (e.nombre||'').toLowerCase().includes(term) ||
-            (e.serie||'').toLowerCase().includes(term)
-        );
-        if (filtered.length === 0) { dropdown.classList.add('hidden'); return; }
-        dropdown.innerHTML = filtered.map(e => `<div style="padding:10px 14px;cursor:pointer;border-bottom:1px solid var(--border);font-size:0.88rem;" onmousedown="Controller.selectEquipoHistorial('${e.id}','${Utils.esc(e.codigo)} - ${Utils.esc(e.nombre)}')">${Utils.esc(e.codigo)} - ${Utils.esc(e.nombre)} <span style="color:var(--muted);font-size:0.8rem;">| ${Utils.esc(e.ubicacion||'')}</span></div>`).join('');
-        dropdown.classList.remove('hidden');
     },
 
     // Ver detalle de reporte
@@ -683,12 +693,16 @@ const Controller = {
         // Cargar datos base
         await this.loadTecnicos();
         await this.loadEquipos();
-
+           // Actualizar select de historial
+        const histSelect = document.getElementById('selectEquipoHistorial');
+        if(histSelect) histSelect.innerHTML = '<option value="">-- Seleccionar equipo --</option>' + this.state.equipos.map(e => `<option value="${e.id}">${Utils.esc(e.codigo)} - ${Utils.esc(e.nombre)}</option>`).join('');
         // Restaurar vista
         const savedView = localStorage.getItem('lleser_view');
         const defaultView = isAdmin ? 'equipos' : 'reportesOT';
-        View.setView(savedView && (isAdmin || ['reportesOT','reportesCorrectivo'].includes(savedView)) ? savedView : defaultView);
-
+        // Forzar vista de reportes si no es admin y trata de acceder a otra vista
+        const validTechViews = ['reportesOT'];
+        const finalView = (isAdmin || validTechViews.includes(savedView)) ? savedView : defaultView;
+        View.setView(isAdmin ? savedView || defaultView : finalView);
         // Cargar datos de la vista actual
         await this.loadCurrentViewData();
     },
@@ -800,6 +814,9 @@ const Controller = {
             }
             App.closeModal('modalEquipo');
             await this.loadEquipos();
+                        // Actualizar select de historial
+            const histSelect = document.getElementById('selectEquipoHistorial');
+            if(histSelect) histSelect.innerHTML = '<option value="">-- Seleccionar equipo --</option>' + this.state.equipos.map(e => `<option value="${e.id}">${Utils.esc(e.codigo)} - ${Utils.esc(e.nombre)}</option>`).join('');
             this.filterEquipos();
         } catch (err) {
             View.toast('Error al guardar: ' + err.message, 'error');
@@ -827,6 +844,9 @@ const Controller = {
             await Model.equipoDelete(id);
             View.toast('Equipo eliminado', 'success');
             await this.loadEquipos();
+            // Actualizar select de historial
+            const histSelect = document.getElementById('selectEquipoHistorial');
+            if(histSelect) histSelect.innerHTML = '<option value="">-- Seleccionar equipo --</option>' + this.state.equipos.map(e => `<option value="${e.id}">${Utils.esc(e.codigo)} - ${Utils.esc(e.nombre)}</option>`).join('');
             this.filterEquipos();
         } catch (err) {
             View.toast('Error al eliminar: ' + err.message, 'error');
@@ -865,15 +885,6 @@ const Controller = {
             View.toast('Error al importar: ' + err.message, 'error');
         }
         input.value = '';
-    },
-
-    // --- HISTORIAL ---
-    async selectEquipoHistorial(id, label) {
-        document.getElementById('searchEquipoHistorial').value = label;
-        document.getElementById('equipoSearchDropdown').classList.add('hidden');
-        this.state.selectedEquipoHistorial = id;
-        const reportes = await Model.reporteGetByEquipo(id);
-        View.renderHistorial(reportes);
     },
 
     // --- ÓRDENES DE TRABAJO ---
@@ -1098,8 +1109,7 @@ const Controller = {
         } else { pag.innerHTML = ''; }
     },
 
-    async saveCorrectivo() {
-        const id = document.getElementById('correctivoId').value;
+        async saveCorrectivo() {
         const equipoId = document.getElementById('correctivoEquipo').value;
         const equipo = this.state.equipos.find(e => e.id === equipoId);
         const fecha = document.getElementById('correctivoFecha').value;
@@ -1121,40 +1131,53 @@ const Controller = {
         const realizaTec = await Model.tecnicoGetById(realizaId);
         const recibidoTec = await Model.tecnicoGetById(recibidoId);
 
-        const reportData = {
-            tipo: 'correctivo',
-            ordenId: null,
-            tipoOrden: 'Mantenimiento Correctivo',
-            equipoId, equipoCodigo: equipo?.codigo||'', equipoNombre: equipo?.nombre||'',
-            fecha, horaInicio, horaFin,
-            tiempoTotal: Utils.calcMinutes(horaInicio, horaFin),
-            realizadoPorId: realizaId,
-            realizadoPorNombre: realizaTec?.nombre||'',
-            realizadoPorCargo: realizaTec?.cargo||'',
-            realizadoPorFirma: realizaTec?.firma||'',
-            estadoEquipo, tareas, fallaReportada,
-            actividadesRealizadas: actividades,
-            repuestos: repuestos||null,
-            observaciones: observaciones||null,
-            recibidoPorId: recibidoId,
-            recibidoPorNombre: recibidoTec?.nombre||'',
-            recibidoPorCargo: recibidoTec?.cargo||'',
-            recibidoPorFirma: recibidoTec?.firma||'',
-            evidencias: this.state.correctivoFotos.length ? this.state.correctivoFotos : null
-        };
-
         try {
-            if (id) {
-                await Model.reporteUpdate(id, reportData);
-            } else {
-                await Model.reporteCreate(reportData);
-            }
-            this.state.currentReporteData = { ...reportData, id };
-            View.toast('Reporte correctivo guardado', 'success');
+            // 1. Obtener consecutivo automático
+            const num = await Model.getNextOrdenNumber();
+            
+            // 2. Crear la Orden de Trabajo en la base de datos
+            const ordRef = await db.collection('workOrders').add({
+                numero: num,
+                equipoId, equipoCodigo: equipo?.codigo||'', equipoNombre: equipo?.nombre||'',
+                tipo: 'Correctivo',
+                actividades: fallaReportada,
+                estado: 'completada',
+                reportId: 'pending',
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+
+            // 3. Crear el Reporte asociado a esa orden
+            const reportData = {
+                tipo: 'correctivo',
+                ordenId: ordRef.id,
+                ordenNumero: num,
+                tipoOrden: 'Mantenimiento Correctivo',
+                equipoId, equipoCodigo: equipo?.codigo||'', equipoNombre: equipo?.nombre||'',
+                fecha, horaInicio, horaFin,
+                tiempoTotal: Utils.calcMinutes(horaInicio, horaFin),
+                realizadoPorId: realizaId, realizadoPorNombre: realizaTec?.nombre||'',
+                realizadoPorCargo: realizaTec?.cargo||'', realizadoPorFirma: realizaTec?.firma||'',
+                estadoEquipo, tareas, fallaReportada,
+                actividadesRealizadas: actividades,
+                repuestos: repuestos||null, observaciones: observaciones||null,
+                recibidoPorId: recibidoId, recibidoPorNombre: recibidoTec?.nombre||'',
+                recibidoPorCargo: recibidoTec?.cargo||'', recibidoPorFirma: recibidoTec?.firma||'',
+                evidencias: this.state.correctivoFotos.length ? this.state.correctivoFotos : null,
+                createdAt: firebase.firestore.FieldValue.serverTimestamp()
+            };
+            const repRef = await db.collection('reports').add(reportData);
+
+            // 4. Actualizar la orden con el ID real del reporte
+            await db.collection('workOrders').doc(ordRef.id).update({ reportId: repRef.id });
+
+            View.toast(`Correctivo #${num} guardado y registrado en Órdenes`, 'success');
             App.closeModal('modalCorrectivo');
-            this.state.correctivosPage = 1;
-            this.state.correctivosLastDoc = null;
-            await this.loadCorrectivos();
+            
+            // 5. Recargar vistas
+            this.state.ordenesPage = 1; this.state.ordenesLastDoc = null; this.state.ordenes = [];
+            await this.loadOrdenes();
+            this.state.reportesOTPage = 1; this.state.reportesOTLastDoc = null; this.state.ordenes = [];
+            await this.loadReportesOT();
         } catch (err) {
             View.toast('Error: ' + err.message, 'error');
         }
@@ -1194,6 +1217,13 @@ const Controller = {
         this.state.currentReporteData = reporte;
         View.renderVerReporte(reporte);
         App.openModal('modalVerReporte');
+    },
+
+    async generarPDFDesdeOrden(reporteId) {
+        View.toast('Generando PDF...', 'info');
+        const reporte = await Model.reporteGetById(reporteId);
+        if (reporte) this.generatePDF(reporte);
+        else View.toast('Error al cargar el reporte', 'error');
     },
 
     // --- MANEJO DE IMÁGENES ---
@@ -1250,9 +1280,17 @@ const Controller = {
         document.getElementById('tecnicoNombre').value = tec.nombre || '';
         document.getElementById('tecnicoCargo').value = tec.cargo || '';
         document.getElementById('tecnicoFirma').value = tec.firma || '';
-        // Dibujar firma existente en canvas
-        SignaturePad.clear();
-        if (tec.firma) SignaturePad.loadImage(tec.firma);
+        
+        // Limpiar y mostrar firma existente si la hay
+        document.getElementById('firmaPreview').innerHTML = '';
+        if (tec.firma) {
+            document.getElementById('firmaPreview').innerHTML = `<div class="image-preview"><img src="${tec.firma}" alt="Firma"><button type="button" class="remove-img" onclick="document.getElementById('tecnicoFirma').value='';this.parentElement.remove()"><i class="fas fa-times"></i></button></div>`;
+        }
+        
+        // Limpiar input de archivo por si acaso
+        const fileInput = document.getElementById('firmaFileInput');
+        if (fileInput) fileInput.value = '';
+        
         App.openModal('modalTecnico');
     },
 
@@ -1316,7 +1354,8 @@ const Controller = {
 
     async toggleUsuario(id, currentlyActive) {
         const action = currentlyActive ? 'desactivar' : 'activar';
-        const confirmed = await View.confirm(`¿${action.charAt(0).toUpperCase()+action.slice(1)} este usuario?`);
+        const textoBtn = currentlyActive ? 'Desactivar' : 'Activar';
+        const confirmed = await View.confirm(`¿${action.charAt(0).toUpperCase()+action.slice(1)} este usuario?`, textoBtn);
         if (!confirmed) return;
         try {
             await Model.userDocUpdate(id, { activo: !currentlyActive });
@@ -1675,6 +1714,16 @@ const Controller = {
 
     // --- EVENTOS ---
     bindEvents() {
+        // Seleccionar equipo en historial
+        document.getElementById('selectEquipoHistorial').addEventListener('change', async (e) => {
+            const equipoId = e.target.value;
+            if (!equipoId) {
+                document.getElementById('equipoHistorialList').innerHTML = '<div class="empty-state"><i class="fas fa-history"></i><p>Selecciona un equipo para ver su historial</p></div>';
+                return;
+            }
+            const reportes = await Model.reporteGetByEquipo(equipoId);
+            View.renderHistorial(reportes);
+        });
         // Login
         document.getElementById('loginForm').addEventListener('submit', (e) => this.handleLogin(e));
         document.getElementById('btnLogout').addEventListener('click', () => this.handleLogout());
@@ -1710,23 +1759,12 @@ const Controller = {
             App.openModal('modalEquipo');
         });
         document.getElementById('btnSaveEquipo').addEventListener('click', () => this.saveEquipo());
-        document.getElementById('searchEquipo').addEventListener('input', () => {
-            this.state.equiposPage = 1;
-            this.filterEquipos();
-        });
         document.getElementById('btnImportExcel').addEventListener('click', () => document.getElementById('excelFileInput').click());
         document.getElementById('excelFileInput').addEventListener('change', () => this.importExcel());
 
         // Búsqueda de historial
         const histInput = document.getElementById('searchEquipoHistorial');
         const histDropdown = document.getElementById('equipoSearchDropdown');
-        histInput.addEventListener('input', () => {
-            View.renderEquipoDropdown(this.state.equipos, 'searchEquipoHistorial', 'equipoSearchDropdown');
-        });
-        histInput.addEventListener('blur', () => { setTimeout(() => histDropdown.classList.add('hidden'), 200); });
-        histInput.addEventListener('focus', () => {
-            if (histInput.value.trim()) View.renderEquipoDropdown(this.state.equipos, 'searchEquipoHistorial', 'equipoSearchDropdown');
-        });
 
         // --- ÓRDENES ---
         document.getElementById('btnAddOrden')?.addEventListener('click', () => {
@@ -1740,13 +1778,8 @@ const Controller = {
 
         // --- REPORTES OT ---
         document.getElementById('btnSaveReporteOT').addEventListener('click', () => this.saveReporteOT());
-        document.getElementById('btnPDFReporteOT').addEventListener('click', async () => {
-            // Primero guardar, luego generar PDF
-            await this.saveReporteOT();
-            if (this.state.currentReporteData) {
-                this.generatePDF(this.state.currentReporteData);
-            }
-        });
+  
+      
 
         // Imágenes reporte OT
         document.getElementById('reporteOTFotos').addEventListener('change', () => this.handleImageUpload('reporteOTFotos', 'reporteOTFotos'));
@@ -1765,12 +1798,7 @@ const Controller = {
             App.openModal('modalCorrectivo');
         });
         document.getElementById('btnSaveCorrectivo').addEventListener('click', () => this.saveCorrectivo());
-        document.getElementById('btnPDFCorrectivo').addEventListener('click', async () => {
-            await this.saveCorrectivo();
-            if (this.state.currentReporteData) {
-                this.generatePDF(this.state.currentReporteData);
-            }
-        });
+
 
         // Imágenes correctivo
         document.getElementById('correctivoFotos').addEventListener('change', () => this.handleImageUpload('correctivoFotos', 'correctivoFotos'));
@@ -1780,22 +1808,28 @@ const Controller = {
             if (this.state.currentReporteData) this.generatePDF(this.state.currentReporteData);
         });
 
-        // --- TÉCNICOS ---
+                // --- TÉCNICOS ---
         document.getElementById('btnAddTecnico').addEventListener('click', () => {
             document.getElementById('modalTecnicoTitle').textContent = 'Agregar Técnico';
             document.getElementById('formTecnico').reset();
             document.getElementById('tecnicoId').value = '';
             document.getElementById('tecnicoFirma').value = '';
-            SignaturePad.clear();
+            document.getElementById('firmaPreview').innerHTML = '';
             App.openModal('modalTecnico');
         });
-        document.getElementById('btnSaveTecnico').addEventListener('click', () => {
-            // Capturar firma antes de guardar
-            document.getElementById('tecnicoFirma').value = SignaturePad.toBase64();
-            this.saveTecnico();
-        });
-        document.getElementById('btnClearFirma').addEventListener('click', () => SignaturePad.clear());
 
+        document.getElementById('btnSaveTecnico').addEventListener('click', () => {
+            Controller.saveTecnico();
+        });
+
+        // Carga de imagen de firma
+        document.getElementById('firmaFileInput').addEventListener('change', async (e) => {
+            if (e.target.files.length) {
+                const base64 = await Utils.compressImage(e.target.files[0], 300, 0.8);
+                document.getElementById('tecnicoFirma').value = base64;
+                document.getElementById('firmaPreview').innerHTML = `<div class="image-preview"><img src="${base64}" alt="Firma"><button type="button" class="remove-img" onclick="document.getElementById('tecnicoFirma').value='';this.parentElement.remove()"><i class="fas fa-times"></i></button></div>`;
+            }
+        });
         // --- USUARIOS ---
         document.getElementById('btnAddUsuario').addEventListener('click', () => {
             document.getElementById('modalUsuarioTitle').textContent = 'Crear Usuario';
@@ -1864,96 +1898,6 @@ const Controller = {
     }
 };
 
-// ============================================
-// FIRMA DIGITAL - Canvas Signature Pad
-// ============================================
-const SignaturePad = {
-    canvas: null,
-    ctx: null,
-    drawing: false,
-    hasContent: false,
-
-    init() {
-        this.canvas = document.getElementById('firmaCanvas');
-        if (!this.canvas) return;
-        this.ctx = this.canvas.getContext('2d');
-
-        // Ajustar resolución del canvas
-        const rect = this.canvas.parentElement.getBoundingClientRect();
-        const dpr = window.devicePixelRatio || 1;
-        this.canvas.width = 500 * dpr;
-        this.canvas.height = 150 * dpr;
-        this.canvas.style.width = '100%';
-        this.canvas.style.height = '150px';
-        this.ctx.scale(dpr, dpr);
-        this.ctx.lineCap = 'round';
-        this.ctx.lineJoin = 'round';
-        this.ctx.lineWidth = 2;
-        this.ctx.strokeStyle = '#0F2B46';
-
-        // Eventos de mouse
-        this.canvas.addEventListener('mousedown', (e) => this.startDraw(e));
-        this.canvas.addEventListener('mousemove', (e) => this.draw(e));
-        this.canvas.addEventListener('mouseup', () => this.endDraw());
-        this.canvas.addEventListener('mouseleave', () => this.endDraw());
-
-        // Eventos táctiles
-        this.canvas.addEventListener('touchstart', (e) => { e.preventDefault(); this.startDraw(e.touches[0]); }, { passive: false });
-        this.canvas.addEventListener('touchmove', (e) => { e.preventDefault(); this.draw(e.touches[0]); }, { passive: false });
-        this.canvas.addEventListener('touchend', () => this.endDraw());
-    },
-
-    getPos(e) {
-        const rect = this.canvas.getBoundingClientRect();
-        return {
-            x: (e.clientX - rect.left) * (500 / rect.width),
-            y: (e.clientY - rect.top) * (150 / rect.height)
-        };
-    },
-
-    startDraw(e) {
-        this.drawing = true;
-        const pos = this.getPos(e);
-        this.ctx.beginPath();
-        this.ctx.moveTo(pos.x, pos.y);
-    },
-
-    draw(e) {
-        if (!this.drawing) return;
-        const pos = this.getPos(e);
-        this.ctx.lineTo(pos.x, pos.y);
-        this.ctx.stroke();
-        this.hasContent = true;
-    },
-
-    endDraw() {
-        this.drawing = false;
-    },
-
-    clear() {
-        if (!this.ctx) this.init();
-        this.ctx.clearRect(0, 0, 500, 150);
-        this.hasContent = false;
-    },
-
-    toBase64() {
-        if (!this.hasContent) return '';
-        // Recortar la firma (eliminar espacio en blanco)
-        const imgData = this.canvas.toDataURL('image/png');
-        return imgData;
-    },
-
-    loadImage(base64) {
-        if (!this.ctx) this.init();
-        const img = new Image();
-        img.onload = () => {
-            this.clear();
-            this.ctx.drawImage(img, 0, 0, 500, 150);
-            this.hasContent = true;
-        };
-        img.src = base64;
-    }
-};
 
 // ============================================
 // APP - Inicialización y utilidades generales
@@ -1964,10 +1908,6 @@ const App = {
         if (modal) {
             modal.classList.add('show');
             document.body.style.overflow = 'hidden';
-            // Iniciar pad de firma si es el modal de técnico
-            if (id === 'modalTecnico') {
-                setTimeout(() => SignaturePad.init(), 100);
-            }
         }
     },
 

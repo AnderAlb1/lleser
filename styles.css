@@ -1236,3 +1236,18 @@ textarea.form-control {
 .justify-between { justify-content: space-between; }
 .hidden { display: none !important; }
 .w-full { width: 100%; }
+
+/* FIX MOVIL */
+@media (max-width: 768px) {
+    .form-row, .form-row-3 { grid-template-columns: 1fr; }
+    .card-header { flex-direction: column; align-items: stretch; }
+    .toolbar { flex-direction: column; }
+    .search-bar { max-width: 100% !important; }
+    table { font-size: 0.8rem; }
+    thead th, tbody td { padding: 8px 6px; white-space: nowrap; }
+    .modal { margin: 8px; max-height: 95vh; }
+    .modal-body { max-height: 80vh; }
+    .checkbox-group { gap: 6px; }
+    .checkbox-label { font-size: 0.8rem; padding: 4px 8px; }
+    .btn-sm { padding: 6px 10px; font-size: 0.75rem; }
+}

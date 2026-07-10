@@ -7,14 +7,14 @@
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <!-- jsPDF para generación de PDFs -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
     <!-- SheetJS para importación de Excel -->
-    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js" defer></script>
     <!-- Firebase SDK (compat) -->
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
-    <script src="config.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js" defer></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js" defer></script>
+    <script src="config.js" defer></script>
 </head>
 <body>
 
@@ -24,9 +24,16 @@
 <div class="toast-container" id="toastContainer"></div>
 
 <!-- ============================================
+     PANTALLA DE CARGA INICIAL (evita el parpadeo del login)
+     ============================================ -->
+<div class="app-boot-screen" id="appBootScreen">
+    <span class="spinner"></span>
+</div>
+
+<!-- ============================================
      PANTALLA DE LOGIN
      ============================================ -->
-<div class="login-screen" id="loginScreen">
+<div class="login-screen hidden" id="loginScreen">
     <div class="login-card">
         <div class="login-logo">
             <span class="lle">Lle</span><span class="ser">Ser</span>
@@ -138,7 +145,7 @@
                         </div>
                         <div class="card-body" style="padding:0;">
                             <div class="table-wrapper">
-                                <table>
+                                <table class="table-mobile-cards">
                                     <thead>
                                         <tr>
                                             <th>Código</th>
@@ -197,7 +204,7 @@
                     </div>
                     <div class="card-body" style="padding:0;">
                         <div class="table-wrapper">
-                            <table>
+                            <table class="table-mobile-cards">
                                 <thead>
                                     <tr>
                                         <th>No.</th>
@@ -290,7 +297,7 @@
                         </div>
                         <div class="card-body" style="padding:0;">
                             <div class="table-wrapper">
-                                <table>
+                                <table class="table-mobile-cards">
                                     <thead>
                                         <tr>
                                             <th>Nombre</th>
@@ -321,7 +328,7 @@
                         </div>
                         <div class="card-body" style="padding:0;">
                             <div class="table-wrapper">
-                                <table>
+                                <table class="table-mobile-cards">
                                     <thead>
                                         <tr>
                                             <th>Nombre</th>
@@ -751,6 +758,6 @@
     </div>
 </div>
 
-<script src="script.js"></script>
+<script src="script.js" defer></script>
 </body>
 </html>

@@ -55,6 +55,22 @@ button { cursor: pointer; font-family: inherit; }
 input, select, textarea { font-family: inherit; font-size: 0.93rem; }
 
 /* ============================================
+   PANTALLA DE CARGA INICIAL (splash mientras Firebase confirma sesión)
+   ============================================ */
+.app-boot-screen {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 50%, var(--primary-light) 100%);
+}
+.app-boot-screen .spinner {
+    width: 40px;
+    height: 40px;
+    border-width: 4px;
+}
+
+/* ============================================
    PANTALLA DE LOGIN
    ============================================ */
 .login-screen {
@@ -1186,10 +1202,6 @@ textarea.form-control {
         font-size: 0.82rem;
     }
 
-    thead th, tbody td {
-        padding: 9px 10px;
-    }
-
     .checkbox-group, .radio-group {
         gap: 6px;
     }
@@ -1243,8 +1255,6 @@ textarea.form-control {
     .card-header { flex-direction: column; align-items: stretch; }
     .toolbar { flex-direction: column; }
     .search-bar { max-width: 100% !important; }
-    table { font-size: 0.8rem; }
-    thead th, tbody td { padding: 8px 6px; white-space: nowrap; }
     .modal { margin: 8px; max-height: 95vh; }
     .modal-body { max-height: 80vh; }
     .checkbox-group { gap: 6px; }
@@ -1367,4 +1377,81 @@ textarea.form-control {
 @media (max-width: 768px) {
     .dash-row { grid-template-columns: 1fr; }
     .dash-info h4 { font-size: 1.3rem; }
+}
+
+/* Trunca texto largo solo en tabla de escritorio; en móvil (tarjetas) se envuelve normal */
+@media (min-width: 641px) {
+    .td-truncate {
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+/* ============================================
+   TABLAS RESPONSIVE EN MÓVIL
+   En vez de encoger la fuente y forzar scroll horizontal,
+   cada fila se convierte en una tarjeta apilada con
+   etiquetas (usa el atributo data-label de cada <td>).
+   ============================================ */
+@media (max-width: 640px) {
+    table.table-mobile-cards thead {
+        position: absolute;
+        width: 1px; height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+    }
+
+    table.table-mobile-cards,
+    table.table-mobile-cards tbody,
+    table.table-mobile-cards tr,
+    table.table-mobile-cards td {
+        display: block;
+        width: 100%;
+    }
+
+    table.table-mobile-cards tr {
+        margin-bottom: 12px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        padding: 4px 0;
+        background: var(--card);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    table.table-mobile-cards td {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--border);
+        text-align: right;
+        white-space: normal;
+        font-size: 0.88rem;
+    }
+
+    table.table-mobile-cards td:last-child { border-bottom: none; }
+
+    table.table-mobile-cards td::before {
+        content: attr(data-label);
+        font-weight: 600;
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        color: var(--text-secondary);
+        text-align: left;
+        flex-shrink: 0;
+    }
+
+    /* Celdas de acciones: los botones se ven mejor centrados que a la derecha */
+    table.table-mobile-cards td.text-right {
+        justify-content: flex-end;
+    }
+    table.table-mobile-cards td[data-label=""]::before,
+    table.table-mobile-cards td:not([data-label])::before {
+        content: none;
+    }
 }

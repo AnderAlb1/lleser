@@ -65,17 +65,14 @@
             <span class="lle">Lle</span><span class="ser">Ser</span>
         </div>
         <nav class="sidebar-nav" id="sidebarNav">
-            <button class="nav-item active" data-view="equipos">
+            <button class="nav-item admin-only" data-view="equipos">
                 <i class="fas fa-cogs"></i> Equipos
             </button>
-            <button class="nav-item" data-view="ordenes">
+            <button class="nav-item admin-only" data-view="ordenes">
                 <i class="fas fa-clipboard-list"></i> Órdenes de Trabajo
             </button>
             <button class="nav-item" data-view="reportesOT">
                 <i class="fas fa-file-alt"></i> Reportes OT
-            </button>
-            <button class="nav-item" data-view="reportesCorrectivo">
-                <i class="fas fa-wrench"></i> Correctivos
             </button>
             <button class="nav-item admin-only" data-view="configuracion">
                 <i class="fas fa-sliders-h"></i> Configuración
@@ -164,9 +161,10 @@
                     <div class="card">
                         <div class="card-header">
                             <h3>Historial de Mantenimiento</h3>
-                            <div class="search-bar" style="max-width:300px;">
-                                <i class="fas fa-search"></i>
-                                <input type="text" class="form-control" id="searchEquipoHistorial" placeholder="Seleccionar equipo...">
+                            <div class="toolbar">
+                                <select id="selectEquipoHistorial" class="form-control" style="max-width:350px;">
+                                    <option value="">-- Seleccionar equipo --</option>
+                                </select>
                             </div>
                         </div>
                         <div class="card-body">
@@ -178,8 +176,6 @@
                             </div>
                         </div>
                     </div>
-                    <!-- Dropdown de búsqueda de equipo para historial -->
-                    <div id="equipoSearchDropdown" class="hidden" style="position:absolute;background:#fff;border:1px solid var(--border);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);max-height:250px;overflow-y:auto;z-index:200;width:300px;"></div>
                 </div>
             </div>
 
@@ -203,6 +199,7 @@
                                         <th>Tipo</th>
                                         <th>Actividades</th>
                                         <th>Estado</th>
+                                        <th>Reporte</th>
                                         <th class="text-right">Acciones</th>
                                     </tr>
                                 </thead>
@@ -222,7 +219,10 @@
             <div class="view" id="viewReportesOT">
                 <div class="card">
                     <div class="card-header">
-                        <h3>Reportes de Órdenes de Trabajo</h3>
+                        <h3>Órdenes Pendientes por Reportar</h3>
+                        <button class="btn btn-warning btn-sm" id="btnAddCorrectivo">
+                            <i class="fas fa-plus"></i> Nuevo Correctivo
+                        </button>
                     </div>
                     <div class="card-body" style="padding:0;">
                         <div class="table-wrapper">
@@ -248,39 +248,7 @@
                 </div>
             </div>
 
-            <!-- ========== VISTA: REPORTES CORRECTIVOS ========== -->
-            <div class="view" id="viewReportesCorrectivo">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>Reportes de Mantenimiento Correctivo</h3>
-                        <button class="btn btn-primary btn-sm" id="btnAddCorrectivo">
-                            <i class="fas fa-plus"></i> Nuevo Correctivo
-                        </button>
-                    </div>
-                    <div class="card-body" style="padding:0;">
-                        <div class="table-wrapper">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>Fecha</th>
-                                        <th>Equipo</th>
-                                        <th>Realizado por</th>
-                                        <th>Estado Equipo</th>
-                                        <th class="text-right">Acciones</th>
-                                    </tr>
-                                </thead>
-                                    <tbody id="tbodyCorrectivos"></tbody>
-                            </table>
-                        </div>
-                        <div id="correctivosEmpty" class="empty-state hidden">
-                            <i class="fas fa-wrench"></i>
-                            <p>No hay reportes correctivos registrados</p>
-                        </div>
-                        <div class="load-more-wrap" id="correctivosPagination"></div>
-                    </div>
-                </div>
-            </div>
-
+            
             <!-- ========== VISTA: CONFIGURACIÓN ========== -->
             <div class="view admin-only" id="viewConfiguracion">
                 <div class="tabs">
@@ -563,7 +531,6 @@
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="App.closeModal('modalReporteOT')">Cancelar</button>
             <button class="btn btn-success" id="btnSaveReporteOT"><i class="fas fa-save"></i> Guardar</button>
-            <button class="btn btn-primary" id="btnPDFReporteOT"><i class="fas fa-file-pdf"></i> Generar PDF</button>
         </div>
     </div>
 </div>
@@ -665,7 +632,6 @@
         <div class="modal-footer">
             <button class="btn btn-outline" onclick="App.closeModal('modalCorrectivo')">Cancelar</button>
             <button class="btn btn-success" id="btnSaveCorrectivo"><i class="fas fa-save"></i> Guardar</button>
-            <button class="btn btn-primary" id="btnPDFCorrectivo"><i class="fas fa-file-pdf"></i> Generar PDF</button>
         </div>
     </div>
 </div>
@@ -694,13 +660,15 @@
                 </div>
                 <div class="form-group">
                     <label>Firma</label>
-                    <div class="signature-canvas-wrap">
-                        <canvas id="firmaCanvas" width="500" height="150"></canvas>
-                    </div>
-                    <div class="signature-actions">
-                        <button type="button" class="btn btn-outline btn-sm" id="btnClearFirma">
-                            <i class="fas fa-eraser"></i> Borrar
-                        </button>
+                    <div class="form-group">
+                        <label>Firma (Imagen)</label>
+                        <div class="file-upload" style="padding:16px;">
+                            <i class="fas fa-image"></i>
+                            <p>Clic para cargar la imagen de la firma</p>
+                            <input type="file" id="firmaFileInput" accept="image/*">
+                        </div>
+                        <div class="image-preview-container" id="firmaPreview"></div>
+                        <input type="hidden" id="tecnicoFirma">
                     </div>
                     <input type="hidden" id="tecnicoFirma">
                 </div>

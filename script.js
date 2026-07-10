@@ -10,6 +10,17 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 const auth = firebase.auth();
 
+// Habilitar caché local (IndexedDB) para que las lecturas repetidas
+// no dependan de la red y la app cargue instantáneamente en visitas siguientes.
+db.enablePersistence({ synchronizeTabs: true }).catch((err) => {
+    if (err.code === 'failed-precondition') {
+        // Múltiples pestañas abiertas: la persistencia solo puede activarse en una.
+        console.warn('Persistencia offline no disponible: hay otra pestaña abierta.');
+    } else if (err.code === 'unimplemented') {
+        console.warn('Este navegador no soporta persistencia offline.');
+    }
+});
+
 
 // ============================================
 // UTILIDADES
@@ -106,7 +117,7 @@ const Model = {
         return await db.collection('equipment').doc(id).delete();
     },
     async equipoGetAll() {
-        const snap = await db.collection('equipment').orderBy('createdAt','desc').get({ source: 'server' });
+        const snap = await db.collection('equipment').orderBy('createdAt','desc').get();
         return snap.docs.map(d => ({id: d.id, ...d.data()}));
     },
     async equipoGetById(id) {
@@ -147,14 +158,14 @@ const Model = {
     async ordenGetAll(limit = 15, startAfter = null) {
         let q = db.collection('workOrders').orderBy('numero','desc').limit(limit);
         if (startAfter) q = q.startAfter(startAfter);
-        const snap = await q.get({ source: 'server' });
+        const snap = await q.get();
         return {
             data: snap.docs.map(d => ({id: d.id, ...d.data()})),
             lastDoc: snap.docs[snap.docs.length - 1] || null
         };
     },
     async ordenGetAllNoPag() {
-        const snap = await db.collection('workOrders').orderBy('numero','desc').get({ source: 'server' });
+        const snap = await db.collection('workOrders').orderBy('numero','desc').get();
         return snap.docs.map(d => ({id: d.id, ...d.data()}));
     },
     async ordenCount() {
@@ -175,7 +186,7 @@ const Model = {
     async reporteGetByEquipo(equipoId) {
         const snap = await db.collection('reports')
             .where('equipoId','==',equipoId)
-            .get({ source: 'server' });
+            .get();
         return snap.docs.map(d => ({id: d.id, ...d.data()})).sort((a, b) => {
             if (a.createdAt && b.createdAt) return b.createdAt.toMillis() - a.createdAt.toMillis();
             return 0;
@@ -192,14 +203,14 @@ const Model = {
     async reporteGetAllCorrectivos(limit = 15, startAfter = null) {
         let q = db.collection('reports').where('tipo','==','correctivo').orderBy('createdAt','desc').limit(limit);
         if (startAfter) q = q.startAfter(startAfter);
-        const snap = await q.get({ source: 'server' });
+        const snap = await q.get();
         return {
             data: snap.docs.map(d => ({id: d.id, ...d.data()})),
             lastDoc: snap.docs[snap.docs.length - 1] || null
         };
     },
     async reporteGetAll() {
-        const snap = await db.collection('reports').get({ source: 'server' });
+        const snap = await db.collection('reports').get();
         return snap.docs.map(d => ({id: d.id, ...d.data()}));
     },
 
@@ -214,7 +225,7 @@ const Model = {
         return await db.collection('technicians').doc(id).delete();
     },
     async tecnicoGetAll() {
-        const snap = await db.collection('technicians').orderBy('nombre','asc').get({ source: 'server' });
+        const snap = await db.collection('technicians').orderBy('nombre','asc').get();
         return snap.docs.map(d => ({id: d.id, ...d.data()}));
     },
     async tecnicoGetById(id) {
@@ -241,7 +252,7 @@ const Model = {
         return doc.exists ? {id: doc.id, ...doc.data()} : null;
     },
     async userDocGetAll() {
-        const snap = await db.collection('users').orderBy('nombre','asc').get({ source: 'server' });
+        const snap = await db.collection('users').orderBy('nombre','asc').get();
         return snap.docs.map(d => ({id: d.id, ...d.data()}));
     },
 
@@ -370,13 +381,13 @@ const View = {
         this.hide('equiposEmpty');
         tbody.innerHTML = equipos.map(eq => `
             <tr>
-                <td><strong>${Utils.esc(eq.codigo)}</strong></td>
-                <td>${Utils.esc(eq.nombre)}</td>
-                <td>${Utils.esc(eq.marca || '-')}</td>
-                <td>${Utils.esc(eq.modelo || '-')}</td>
-                <td>${Utils.esc(eq.serie || '-')}</td>
-                <td>${Utils.esc(eq.ubicacion || '-')}</td>
-                <td class="text-right">
+                <td data-label="Código"><strong>${Utils.esc(eq.codigo)}</strong></td>
+                <td data-label="Nombre">${Utils.esc(eq.nombre)}</td>
+                <td data-label="Marca">${Utils.esc(eq.marca || '-')}</td>
+                <td data-label="Modelo">${Utils.esc(eq.modelo || '-')}</td>
+                <td data-label="Serie">${Utils.esc(eq.serie || '-')}</td>
+                <td data-label="Ubicación">${Utils.esc(eq.ubicacion || '-')}</td>
+                <td class="text-right" data-label="Acciones">
                     <button class="btn-icon btn-outline" title="Editar" onclick="Controller.editEquipo('${eq.id}')"><i class="fas fa-pen"></i></button>
                     <button class="btn-icon btn-outline" title="Eliminar" style="color:var(--danger);margin-left:4px;" onclick="Controller.deleteEquipo('${eq.id}')"><i class="fas fa-trash"></i></button>
                 </td>
@@ -422,13 +433,13 @@ const View = {
                 : `<button class="btn-icon btn-outline" title="Editar" onclick="Controller.editOrden('${o.id}')"><i class="fas fa-pen"></i></button>
                    <button class="btn-icon btn-outline" title="Eliminar" style="color:var(--danger);margin-left:4px;" onclick="Controller.deleteOrden('${o.id}')"><i class="fas fa-trash"></i></button>`;
             return `<tr>
-                <td><strong>#${o.numero}</strong></td>
-                <td>${Utils.esc(o.equipoNombre || '')}</td>
-                <td><span class="badge badge-${tipoClass}">${Utils.esc(o.tipo || '')}</span></td>
-                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${Utils.esc(o.actividades || '')}</td>
-                <td><span class="badge badge-${estadoClass}">${o.estado === 'completada' ? 'Completada' : 'Pendiente'}</span></td>
-                <td>${hasReport ? `<button class="btn btn-outline btn-sm" onclick="Controller.verReporte('${o.reportId}')"><i class="fas fa-eye"></i> Ver</button>` : '<span class="badge badge-warning">Pendiente</span>'}</td>
-                <td class="text-right">${btnAcciones}</td>
+                <td data-label="No."><strong>#${o.numero}</strong></td>
+                <td data-label="Equipo">${Utils.esc(o.equipoNombre || '')}</td>
+                <td data-label="Tipo"><span class="badge badge-${tipoClass}">${Utils.esc(o.tipo || '')}</span></td>
+                <td data-label="Actividades" class="td-truncate">${Utils.esc(o.actividades || '')}</td>
+                <td data-label="Estado"><span class="badge badge-${estadoClass}">${o.estado === 'completada' ? 'Completada' : 'Pendiente'}</span></td>
+                <td data-label="Reporte">${hasReport ? `<button class="btn btn-outline btn-sm" onclick="Controller.verReporte('${o.reportId}')"><i class="fas fa-eye"></i> Ver</button>` : '<span class="badge badge-warning">Pendiente</span>'}</td>
+                <td class="text-right" data-label="Acciones">${btnAcciones}</td>
             </tr>`;
         }).join('');
     },
@@ -484,11 +495,11 @@ const View = {
         tbody.innerHTML = reportes.map(r => {
             const estadoClass = r.estadoEquipo === 'Funcionando' ? 'success' : r.estadoEquipo === 'Con falla' ? 'warning' : 'danger';
             return `<tr>
-                <td>${Utils.formatDateShort(r.fecha)}</td>
-                <td>${Utils.esc(r.equipoNombre || '')}</td>
-                <td>${Utils.esc(r.realizadoPorNombre || '')}</td>
-                <td><span class="badge badge-${estadoClass}">${Utils.esc(r.estadoEquipo || '')}</span></td>
-                <td class="text-right">
+                <td data-label="Fecha">${Utils.formatDateShort(r.fecha)}</td>
+                <td data-label="Equipo">${Utils.esc(r.equipoNombre || '')}</td>
+                <td data-label="Realizado por">${Utils.esc(r.realizadoPorNombre || '')}</td>
+                <td data-label="Estado"><span class="badge badge-${estadoClass}">${Utils.esc(r.estadoEquipo || '')}</span></td>
+                <td class="text-right" data-label="Acciones">
                     <button class="btn btn-outline btn-sm" onclick="Controller.verReporte('${r.id}')"><i class="fas fa-eye"></i> Ver</button>
                     <button class="btn-icon btn-outline" style="color:var(--danger);margin-left:4px;" onclick="Controller.deleteReporte('${r.id}','${r.ordenId || ''}')"><i class="fas fa-trash"></i></button>
                 </td>
@@ -504,10 +515,10 @@ const View = {
         this.hide('tecnicosEmpty');
         tbody.innerHTML = tecnicos.map(t => `
             <tr>
-                <td>${Utils.esc(t.nombre)}</td>
-                <td>${Utils.esc(t.cargo)}</td>
-                <td>${t.firma ? '<img src="'+t.firma+'" style="height:30px;" alt="Firma">' : '<span style="color:var(--muted)">Sin firma</span>'}</td>
-                <td class="text-right">
+                <td data-label="Nombre">${Utils.esc(t.nombre)}</td>
+                <td data-label="Cargo">${Utils.esc(t.cargo)}</td>
+                <td data-label="Firma">${t.firma ? '<img src="'+t.firma+'" style="height:30px;" alt="Firma">' : '<span style="color:var(--muted)">Sin firma</span>'}</td>
+                <td class="text-right" data-label="Acciones">
                     <button class="btn-icon btn-outline" title="Editar" onclick="Controller.editTecnico('${t.id}')"><i class="fas fa-pen"></i></button>
                     <button class="btn-icon btn-outline" title="Eliminar" style="color:var(--danger);margin-left:4px;" onclick="Controller.deleteTecnico('${t.id}')"><i class="fas fa-trash"></i></button>
                 </td>
@@ -523,11 +534,11 @@ const View = {
         this.hide('usuariosEmpty');
         tbody.innerHTML = usuarios.map(u => `
             <tr>
-                <td>${Utils.esc(u.nombre)}</td>
-                <td>${Utils.esc(u.email)}</td>
-                <td><span class="badge badge-${u.role === 'admin' ? 'info' : 'secondary'}">${u.role === 'admin' ? 'Administrador' : 'Técnico'}</span></td>
-                <td><span class="badge badge-${u.activo !== false ? 'success' : 'danger'}">${u.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
-                <td class="text-right">
+                <td data-label="Nombre">${Utils.esc(u.nombre)}</td>
+                <td data-label="Correo">${Utils.esc(u.email)}</td>
+                <td data-label="Rol"><span class="badge badge-${u.role === 'admin' ? 'info' : 'secondary'}">${u.role === 'admin' ? 'Administrador' : 'Técnico'}</span></td>
+                <td data-label="Estado"><span class="badge badge-${u.activo !== false ? 'success' : 'danger'}">${u.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
+                <td class="text-right" data-label="Acciones">
                     <button class="btn-icon btn-outline" title="Editar" onclick="Controller.editUsuario('${u.id}','${Utils.esc(u.email)}')"><i class="fas fa-pen"></i></button>
                     <button class="btn-icon btn-outline" title="${u.activo !== false ? 'Desactivar' : 'Activar'}" style="color:${u.activo !== false ? 'var(--warning)' : 'var(--success)'};margin-left:4px;" onclick="Controller.toggleUsuario('${u.id}',${u.activo !== false})"><i class="fas fa-${u.activo !== false ? 'ban' : 'check'}"></i></button>
                 </td>
@@ -782,11 +793,13 @@ const Controller = {
     },
 
     showLogin() {
+        View.hide('appBootScreen');
         View.hide('appContainer');
         View.show('loginScreen');
     },
 
     async showApp() {
+        View.hide('appBootScreen');
         View.hide('loginScreen');
         View.show('appContainer');
 
@@ -803,13 +816,14 @@ const Controller = {
             el.style.display = isAdmin ? '' : 'none';
         });
 
-        // Cargar logo
-        this.state.logo = await Model.getLogo();
+        // Cargar logo, técnicos y equipos en paralelo (antes se hacía uno por uno)
+        const [logo] = await Promise.all([
+            Model.getLogo(),
+            this.loadTecnicos(),
+            this.loadEquipos()
+        ]);
+        this.state.logo = logo;
         if (this.state.logo) this.updateLogoPreview(this.state.logo);
-
-        // Cargar datos base
-        await this.loadTecnicos();
-        await this.loadEquipos();
            // Actualizar select de historial
         const histSelect = document.getElementById('selectEquipoHistorial');
         if(histSelect) histSelect.innerHTML = '<option value="">-- Seleccionar equipo --</option>' + this.state.equipos.map(e => `<option value="${e.id}">${Utils.esc(e.codigo)} - ${Utils.esc(e.nombre)}</option>`).join('');

@@ -65,14 +65,17 @@
             <span class="lle">Lle</span><span class="ser">Ser</span>
         </div>
         <nav class="sidebar-nav" id="sidebarNav">
+            <button class="nav-item admin-only" data-view="dashboard">
+                <i class="fas fa-tachometer-alt"></i> Dashboard
+            </button>
             <button class="nav-item admin-only" data-view="equipos">
                 <i class="fas fa-cogs"></i> Equipos
             </button>
             <button class="nav-item admin-only" data-view="ordenes">
-                <i class="fas fa-clipboard-list"></i> Órdenes de Trabajo
+                <i class="fas fa-clipboard-list"></i> Generar OT
             </button>
             <button class="nav-item" data-view="reportesOT">
-                <i class="fas fa-file-alt"></i> Reportes OT
+                <i class="fas fa-file-alt"></i> Ejecutar OT
             </button>
             <button class="nav-item admin-only" data-view="configuracion">
                 <i class="fas fa-sliders-h"></i> Configuración
@@ -102,7 +105,10 @@
         </header>
 
         <div class="content-area">
-
+           <!-- ========== VISTA: DASHBOARD ========== -->
+            <div class="view admin-only" id="viewDashboard">
+                <div id="dashboardContent"></div>
+            </div>
             <!-- ========== VISTA: EQUIPOS ========== -->
             <div class="view active" id="viewEquipos">
                 <div class="tabs">
@@ -184,7 +190,7 @@
                 <div class="stats-grid" id="ordenesStats"></div>
                 <div class="card">
                     <div class="card-header">
-                        <h3>Órdenes de Trabajo</h3>
+                        <h3>Generar Órdenes de trabajo</h3>
                         <button class="btn btn-primary btn-sm admin-only" id="btnAddOrden">
                             <i class="fas fa-plus"></i> Nueva Orden
                         </button>
@@ -219,29 +225,18 @@
             <div class="view" id="viewReportesOT">
                 <div class="card">
                     <div class="card-header">
-                        <h3>Órdenes Pendientes por Reportar</h3>
+                        <h3>Órdenes Pendientes por Ejecutar</h3>
                         <button class="btn btn-warning btn-sm" id="btnAddCorrectivo">
                             <i class="fas fa-plus"></i> Nuevo Correctivo
                         </button>
                     </div>
                     <div class="card-body" style="padding:0;">
-                        <div class="table-wrapper">
-                            <table>
-                                <thead>
-                                    <tr>
-                                        <th>No. Orden</th>
-                                        <th>Equipo</th>
-                                        <th>Tipo</th>
-                                        <th>Estado</th>
-                                        <th class="text-right">Acción</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tbodyReportesOT"></tbody>
-                            </table>
+                        <div class="card-body" id="reportesOTContainer">
+                            <!-- Aquí se cargarán las tarjetas dinámicamente -->
                         </div>
                         <div id="reportesOTEmpty" class="empty-state hidden">
-                            <i class="fas fa-file-alt"></i>
-                            <p>No hay órdenes de trabajo para reportar</p>
+                            <i class="fas fa-clipboard-check"></i>
+                            <p>No hay órdenes pendientes por reportar</p>
                         </div>
                         <div class="load-more-wrap" id="reportesOTPagination"></div>
                     </div>
@@ -426,7 +421,7 @@
                     <div class="radio-group">
                         <label class="radio-label"><input type="radio" name="ordenTipo" value="Preventivo" required><span>Preventivo</span></label>
                         <label class="radio-label"><input type="radio" name="ordenTipo" value="Correctivo"><span>Correctivo</span></label>
-                        <label class="radio-label"><input type="radio" name="ordenTipo" value="Diagnóstico"><span>Diagnóstico</span></label>
+                        <label class="radio-label"><input type="radio" name="ordenTipo" value="Locativo"><span>Locativo</span></label>
                         <label class="radio-label"><input type="radio" name="ordenTipo" value="Instalación"><span>Instalación</span></label>
                     </div>
                 </div>
@@ -470,13 +465,13 @@
                         <input type="time" id="reporteOTHoraFin" class="form-control" required>
                     </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="reporteOTRealiza">Quién realiza</label>
-                        <select id="reporteOTRealiza" class="form-control" required>
-                            <option value="">Seleccionar...</option>
-                        </select>
-                    </div>
+                                <div class="form-group" id="reporteOTRealizaGroup">
+                    <label for="reporteOTRealiza">Quién realiza</label>
+                    <select id="reporteOTRealiza" class="form-control" required>
+                        <option value="">Seleccionar...</option>
+                    </select>
+                </div>
+                <div id="reporteOTCamposEspeciales">
                     <div class="form-group">
                         <label>Estado del Equipo</label>
                         <div class="radio-group">
@@ -485,18 +480,18 @@
                             <label class="radio-label"><input type="radio" name="reporteOTEstado" value="Fuera de servicio"><span>Fuera de servicio</span></label>
                         </div>
                     </div>
-                </div>
-                <div class="form-group">
-                    <label>Tareas Ejecutadas</label>
-                    <div class="checkbox-group" id="reporteOTTareas">
-                        <label class="checkbox-label"><input type="checkbox" value="Ajuste"><span>Ajuste</span></label>
-                        <label class="checkbox-label"><input type="checkbox" value="Configuración"><span>Configuración</span></label>
-                        <label class="checkbox-label"><input type="checkbox" value="Reparación"><span>Reparación</span></label>
-                        <label class="checkbox-label"><input type="checkbox" value="Lubricación"><span>Lubricación</span></label>
-                        <label class="checkbox-label"><input type="checkbox" value="Test de temperatura"><span>Test de temperatura</span></label>
-                        <label class="checkbox-label"><input type="checkbox" value="Limpieza interna"><span>Limpieza interna</span></label>
-                        <label class="checkbox-label"><input type="checkbox" value="Limpieza externa"><span>Limpieza externa</span></label>
-                        <label class="checkbox-label"><input type="checkbox" value="Verificación de fugas"><span>Verificación de fugas</span></label>
+                    <div class="form-group">
+                        <label>Tareas Ejecutadas</label>
+                        <div class="checkbox-group" id="reporteOTTareas">
+                            <label class="checkbox-label"><input type="checkbox" value="Ajuste"><span>Ajuste</span></label>
+                            <label class="checkbox-label"><input type="checkbox" value="Configuración"><span>Configuración</span></label>
+                            <label class="checkbox-label"><input type="checkbox" value="Reparación"><span>Reparación</span></label>
+                            <label class="checkbox-label"><input type="checkbox" value="Lubricación"><span>Lubricación</span></label>
+                            <label class="checkbox-label"><input type="checkbox" value="Test de temperatura"><span>Test de temperatura</span></label>
+                            <label class="checkbox-label"><input type="checkbox" value="Limpieza interna"><span>Limpieza interna</span></label>
+                            <label class="checkbox-label"><input type="checkbox" value="Limpieza externa"><span>Limpieza externa</span></label>
+                            <label class="checkbox-label"><input type="checkbox" value="Verificación de fugas"><span>Verificación de fugas</span></label>
+                        </div>
                     </div>
                 </div>
                 <div class="form-group">
@@ -504,8 +499,8 @@
                     <textarea id="reporteOTActividades" class="form-control" rows="3" required></textarea>
                 </div>
                 <div class="form-group">
-                    <label for="reporteOTRepuestos">Repuestos Utilizados</label>
-                    <textarea id="reporteOTRepuestos" class="form-control" rows="2" placeholder="Opcional"></textarea>
+                  <label for="reporteOTRepuestos" id="labelRepuestosOT">Repuestos Utilizados</label>
+                  <textarea id="reporteOTRepuestos" class="form-control" rows="2" placeholder="Opcional"></textarea>
                 </div>
                 <div class="form-group">
                     <label for="reporteOTObservaciones">Observaciones</label>

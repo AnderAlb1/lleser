@@ -86,7 +86,7 @@ const Utils = {
 
     // Tareas disponibles
     tareas: ['Ajuste','Configuración','Reparación','Lubricación','Test de temperatura','Limpieza interna','Limpieza externa','Verificación de fugas'],
-    tiposOrden: ['Mantenimiento Preventivo','Mantenimiento Correctivo','Diagnóstico','Instalación'],
+    tiposOrden: ['Mantenimiento Preventivo','Mantenimiento Correctivo','Locativo','Instalación'],
     estadosEquipo: ['Funcionando','Con falla','Fuera de servicio']
 };
 
@@ -197,6 +197,10 @@ const Model = {
             data: snap.docs.map(d => ({id: d.id, ...d.data()})),
             lastDoc: snap.docs[snap.docs.length - 1] || null
         };
+    },
+    async reporteGetAll() {
+        const snap = await db.collection('reports').get({ source: 'server' });
+        return snap.docs.map(d => ({id: d.id, ...d.data()}));
     },
 
     // --- TÉCNICOS ---
@@ -332,7 +336,7 @@ const View = {
         document.querySelector(`.nav-item[data-view="${viewId}"]`)?.classList.add('active');
 
         // Título
-        const titles = { equipos: 'Equipos', ordenes: 'Órdenes de Trabajo', reportesOT: 'Reportes de Órdenes de Trabajo', reportesCorrectivo: 'Reportes Correctivos', configuracion: 'Configuración' };
+        const titles = { dashboard: 'Dashboard', equipos: 'Equipos', ordenes: 'Generar Órdenes de Trabajo', reportesOT: 'Ejecutar Órdenes de Trabajo', configuracion: 'Configuración' };
         document.getElementById('pageTitle').textContent = titles[viewId] || '';
 
         // Guardar estado
@@ -430,30 +434,45 @@ const View = {
     },
 
     // Renderizar reportes de OT
-    renderReportesOT(ordenes) {
-        const tbody = document.getElementById('tbodyReportesOT');
+        renderReportesOT(ordenes) {
+        const container = document.getElementById('reportesOTContainer');
         const empty = document.getElementById('reportesOTEmpty');
-        if (ordenes.length === 0) { tbody.innerHTML = ''; this.show('reportesOTEmpty'); return; }
-                // FILTRAR SOLO PENDIENTES
+        
+        // Filtrar solo pendientes
         const pendientes = ordenes.filter(o => o.estado !== 'completada');
-        if (pendientes.length === 0) { tbody.innerHTML = ''; this.show('reportesOTEmpty'); return; }
-        this.hide('reportesOTEmpty');
-        tbody.innerHTML = pendientes.map(o => {
+        
+        if (pendientes.length === 0) {
+            container.innerHTML = '';
+            View.show('reportesOTEmpty');
+            return;
+        }
+        
+        View.hide('reportesOTEmpty');
+        container.innerHTML = `<div class="ot-cards-grid">${pendientes.map(o => {
             const tipoClass = o.tipo === 'Preventivo' ? 'info' : o.tipo === 'Correctivo' ? 'danger' : 'warning';
-            const hasReport = o.reportId;
-            return `<tr>
-                <td><strong>#${o.numero}</strong></td>
-                <td>${Utils.esc(o.equipoNombre || '')}</td>
-                <td><span class="badge badge-${tipoClass}">${Utils.esc(o.tipo || '')}</span></td>
-                <td><span class="badge badge-${hasReport ? 'success' : 'warning'}">${hasReport ? 'Reportado' : 'Pendiente'}</span></td>
-                <td class="text-right">
-                    ${hasReport
-                        ? `<button class="btn btn-outline btn-sm" onclick="Controller.verReporte('${o.reportId}')"><i class="fas fa-eye"></i> Ver</button>`
-                        : `<button class="btn btn-primary btn-sm" onclick="Controller.abrirReporteOT('${o.id}')"><i class="fas fa-file-alt"></i> Reportar</button>`
-                    }
-                </td>
-            </tr>`;
-        }).join('');
+            return `
+            <div class="ot-card">
+                <div class="ot-card-header">
+                    <span class="ot-card-num">OT #${o.numero}</span>
+                    <span class="badge badge-${tipoClass}">${Utils.esc(o.tipo || '')}</span>
+                </div>
+                <div class="ot-card-body">
+                    <div class="ot-card-info">
+                        <i class="fas fa-cog"></i>
+                        <strong>${Utils.esc(o.equipoCodigo || '')}</strong> - ${Utils.esc(o.equipoNombre || '')}
+                    </div>
+                    <div class="ot-card-actividades">
+                        <strong style="display:block;margin-bottom:4px;font-size:0.78rem;color:var(--muted);text-transform:uppercase;">Actividades a realizar:</strong>
+                        ${Utils.esc(o.actividades || 'Sin descripción')}
+                    </div>
+                </div>
+                <div class="ot-card-footer">
+                    <button class="btn btn-primary" onclick="Controller.abrirReporteOT('${o.id}')">
+                        <i class="fas fa-file-alt"></i> Diligenciar Reporte
+                    </button>
+                </div>
+            </div>`;
+        }).join('')}</div>`;
     },
 
     // Renderizar correctivos
@@ -575,7 +594,6 @@ const View = {
             <div class="stat-card"><div class="stat-icon green"><i class="fas fa-check-circle"></i></div><div class="stat-info"><h4>${completadas}</h4><p>Completadas</p></div></div>
         `;
     },
-
     // Ver detalle de reporte
     renderVerReporte(reporte) {
         const c = document.getElementById('verReporteContent');
@@ -604,7 +622,100 @@ const View = {
             html += `</div></div>`;
         }
         c.innerHTML = html;
+    },
+
+    renderDashboard(data) {
+        const container = document.getElementById('dashboardContent');
+        const { ordenes, reportes } = data;
+        
+        const total = ordenes.length;
+        const preventivos = ordenes.filter(o => o.tipo === 'Preventivo').length;
+        const correctivos = ordenes.filter(o => o.tipo === 'Correctivo').length;
+        const locativos = ordenes.filter(o => o.tipo === 'Locativo').length;
+        const instalaciones = ordenes.filter(o => o.tipo === 'Instalación').length;
+        const pendientes = ordenes.filter(o => o.estado === 'pendiente').length;
+        const completadas = ordenes.filter(o => o.estado === 'completada').length;
+
+        // Eficiencia correctivos
+        const repsCorr = reportes.filter(r => r.tipo === 'correctivo' && r.tiempoTotal);
+        let tiempoProm = 0;
+        if (repsCorr.length > 0) {
+            tiempoProm = Math.round(repsCorr.reduce((acc, curr) => acc + (curr.tiempoTotal || 0), 0) / repsCorr.length);
+        }
+
+                // Equipo que más falla (por código) y su tiempo acumulado
+        const conteoEq = {};
+        repsCorr.forEach(r => {
+            const code = r.equipoCodigo || 'Sin código';
+            if (!conteoEq[code]) conteoEq[code] = { count: 0, time: 0 };
+            conteoEq[code].count++;
+            conteoEq[code].time += (r.tiempoTotal || 0);
+        });
+        let eqMasFalla = null, maxFallas = 0, tiempoAcumulado = 0;
+        for (const [codigo, data] of Object.entries(conteoEq)) {
+            if (data.count > maxFallas) {
+                maxFallas = data.count;
+                eqMasFalla = codigo;
+                tiempoAcumulado = data.time;
+            }
+        }
+        
+        // Formatear tiempo acumulado (a horas y minutos si pasa de 60 min)
+        const horas = Math.floor(tiempoAcumulado / 60);
+        const mins = tiempoAcumulado % 60;
+        const tiempoFormateado = horas > 0 ? `${horas}h ${mins}m` : `${mins} min`;
+
+        // Preventivos realizados
+        const prevRealizados = reportes.filter(r => r.tipoOrden && r.tipoOrden.includes('Preventivo')).length;
+
+        container.innerHTML = `
+            <div class="dash-grid">
+                <div class="dash-card"><div class="dash-icon blue"><i class="fas fa-clipboard-list"></i></div><div class="dash-info"><h4>${total}</h4><p>Total Órdenes</p></div></div>
+                <div class="dash-card"><div class="dash-icon green"><i class="fas fa-check-circle"></i></div><div class="dash-info"><h4>${completadas}</h4><p>Completadas</p></div></div>
+                <div class="dash-card"><div class="dash-icon orange"><i class="fas fa-clock"></i></div><div class="dash-info"><h4>${pendientes}</h4><p>Pendientes</p></div></div>
+                <div class="dash-card"><div class="dash-icon purple"><i class="fas fa-tools"></i></div><div class="dash-info"><h4>${prevRealizados}</h4><p>Preventivos Ejecutados</p></div></div>
+            </div>
+
+            <div class="card" style="margin-bottom: 24px;">
+                <div class="card-body" style="padding: 16px;">
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; text-align: center;">
+                        <div style="background:var(--accent-light);padding:14px;border-radius:var(--radius-sm);"><div style="font-size:1.4rem;font-weight:800;color:var(--accent);">${preventivos}</div><div style="font-size:0.78rem;color:var(--text-sec);margin-top:4px;">Preventivos</div></div>
+                        <div style="background:var(--danger-bg);padding:14px;border-radius:var(--radius-sm);"><div style="font-size:1.4rem;font-weight:800;color:var(--danger);">${correctivos}</div><div style="font-size:0.78rem;color:var(--text-sec);margin-top:4px;">Correctivos</div></div>
+                        <div style="background:var(--warning-bg);padding:14px;border-radius:var(--radius-sm);"><div style="font-size:1.4rem;font-weight:800;color:#B45309;">${locativos}</div><div style="font-size:0.78rem;color:var(--text-sec);margin-top:4px;">Locativos</div></div>
+                        <div style="background:rgba(139,92,246,0.1);padding:14px;border-radius:var(--radius-sm);"><div style="font-size:1.4rem;font-weight:800;color:#8B5CF6;">${instalaciones}</div><div style="font-size:0.78rem;color:var(--text-sec);margin-top:4px;">Instalación</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dash-row">
+                <div class="dash-detail-card">
+                    <h3><i class="fas fa-tachometer-alt"></i> Eficiencia Correctivos</h3>
+                    <div style="text-align:center;padding:20px 0;">
+                        <div style="font-size:3rem;font-weight:800;color:var(--primary);line-height:1;">${tiempoProm}</div>
+                        <div style="font-size:0.9rem;color:var(--muted);margin-top:8px;">Minutos promedio</div>
+                        <div style="font-size:0.8rem;color:var(--text-sec);margin-top:4px;">Basado en ${repsCorr.length} reporte(s)</div>
+                    </div>
+                </div>
+                <div class="dash-detail-card">
+                    <h3><i class="fas fa-exclamation-triangle"></i> Equipo que más falla</h3>
+                    ${eqMasFalla 
+                        ? `<div class="dash-eq-falla" style="flex-direction:column;align-items:flex-start;gap:8px;">
+                                <div style="display:flex;justify-content:space-between;width:100%;align-items:center;">
+                                    <span class="eq-name">${Utils.esc(eqMasFalla)}</span>
+                                    <span class="eq-count">${maxFallas}</span>
+                                </div>
+                                <div style="font-size:0.85rem;color:var(--text-sec);">
+                                    <i class="fas fa-clock" style="margin-right:4px;color:var(--warning);"></i> Tiempo acumulado: <strong>${tiempoFormateado}</strong>
+                                </div>
+                           </div>
+                           <p style="font-size:0.82rem;color:var(--muted);margin-top:12px;">Equipo con mayor cantidad de mantenimientos correctivos registrados.</p>`
+                        : `<div class="empty-state" style="padding:30px 0;"><i class="fas fa-smile-beam"></i><p>Sin registros de fallas aún</p></div>`
+                    }
+                </div>
+            </div>
+        `;
     }
+    
 };
 
 // ============================================
@@ -632,7 +743,13 @@ const Controller = {
         selectedEquipoHistorial: null,
         logo: null
     },
-
+    async loadDashboard() {
+        const [ordenes, reportes] = await Promise.all([
+            Model.ordenGetAllNoPag(),
+            Model.reporteGetAll()
+        ]);
+        View.renderDashboard({ ordenes, reportes });
+    },
     // --- INICIALIZACIÓN ---
     async init() {
         // Escuchar estado de autenticación
@@ -698,7 +815,7 @@ const Controller = {
         if(histSelect) histSelect.innerHTML = '<option value="">-- Seleccionar equipo --</option>' + this.state.equipos.map(e => `<option value="${e.id}">${Utils.esc(e.codigo)} - ${Utils.esc(e.nombre)}</option>`).join('');
         // Restaurar vista
         const savedView = localStorage.getItem('lleser_view');
-        const defaultView = isAdmin ? 'equipos' : 'reportesOT';
+        const defaultView = isAdmin ? 'dashboard' : 'reportesOT';
         // Forzar vista de reportes si no es admin y trata de acceder a otra vista
         const validTechViews = ['reportesOT'];
         const finalView = (isAdmin || validTechViews.includes(savedView)) ? savedView : defaultView;
@@ -710,6 +827,7 @@ const Controller = {
     async loadCurrentViewData() {
         const view = localStorage.getItem('lleser_view') || 'equipos';
         switch(view) {
+            case 'dashboard': await this.loadDashboard(); break;
             case 'equipos': this.filterEquipos(); break;
             case 'ordenes': await this.loadOrdenes(); break;
             case 'reportesOT': await this.loadReportesOT(); break;
@@ -991,6 +1109,10 @@ const Controller = {
         document.getElementById('reporteOTHoraFin').value = '';
         View.fillTecnicosSelect('reporteOTRealiza', this.state.tecnicos);
         View.fillTecnicosSelect('reporteOTRecibido', this.state.tecnicos);
+                // Adaptar formulario según el tipo de orden
+        const esLocativo = ord.tipo === 'Locativo';
+        document.getElementById('reporteOTCamposEspeciales').style.display = esLocativo ? 'none' : 'block';
+        document.getElementById('labelRepuestosOT').textContent = esLocativo ? 'Materiales Usados' : 'Repuestos Utilizados';
         document.querySelectorAll('input[name="reporteOTEstado"]').forEach(r => r.checked = false);
         document.querySelectorAll('#reporteOTTareas input[type="checkbox"]').forEach(c => c.checked = false);
         document.getElementById('reporteOTActividades').value = '';
@@ -1012,15 +1134,16 @@ const Controller = {
         const horaInicio = document.getElementById('reporteOTHoraInicio').value;
         const horaFin = document.getElementById('reporteOTHoraFin').value;
         const realizaId = document.getElementById('reporteOTRealiza').value;
-        const estadoEquipo = document.querySelector('input[name="reporteOTEstado"]:checked')?.value;
-        const tareas = Array.from(document.querySelectorAll('#reporteOTTareas input:checked')).map(c => c.value);
+        const esLocativo = orden.tipo === 'Locativo';
+        const estadoEquipo = esLocativo ? 'N/A' : (document.querySelector('input[name="reporteOTEstado"]:checked')?.value);
+        const tareas = esLocativo ? [] : Array.from(document.querySelectorAll('#reporteOTTareas input:checked')).map(c => c.value);
         const actividades = document.getElementById('reporteOTActividades').value.trim();
         const repuestos = document.getElementById('reporteOTRepuestos').value.trim();
         const observaciones = document.getElementById('reporteOTObservaciones').value.trim();
         const recibidoId = document.getElementById('reporteOTRecibido').value;
 
-        if (!fecha || !horaInicio || !horaFin || !realizaId || !estadoEquipo || !actividades || !recibidoId) {
-            View.toast('Completa todos los campos obligatorios', 'warning'); return;
+                if (!fecha || !horaInicio || !horaFin || !realizaId || !actividades || !recibidoId) {
+        View.toast('Completa todos los campos obligatorios', 'warning'); return;
         }
 
         const realizaTec = await Model.tecnicoGetById(realizaId);
